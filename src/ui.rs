@@ -1,9 +1,9 @@
 use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
-    style::{Style, Stylize},
+    style::{Style, Stylize, Color},
     symbols,
     Frame,
-    layout::{Layout, Constraint, Direction}
+    layout::{Layout, Constraint, Direction, Alignment}
 };
 use crate::vk_api::{Dialog, Message, VkClient};
 
@@ -24,12 +24,19 @@ pub enum Command {
     LoadMessages(i64),
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum Mode {
+    Normal,
+    Insert,
+}
+
 pub struct App {
     pub screen: Screen,
     pub dialogs: Vec<Dialog>,
     pub min_size: (u16, u16),
     pub client: VkClient,
     pub running: bool,
+    pub mode: Mode,
 }
 
 impl App {
@@ -44,6 +51,7 @@ impl App {
             min_size,
             client,
             running: true,
+            mode: Mode::Normal,
         }
     }
 
@@ -72,14 +80,32 @@ impl App {
             return;
         }
 
-        // split screen for left & right sides
-        let chunks = Layout::default()
+        // split screen for mode, left & right sides
+        let main_chunks = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints([
+                Constraint::Min(0),
+                Constraint::Length(1),
+            ])
+            .split(area);
+
+        let horizontal_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
             .split(area);
 
-        self.render_left_panel(f, chunks[0]);
-        self.render_right_panel(f, chunks[1]);
+        self.render_left_panel(f, horizontal_chunks[0]);
+        self.render_right_panel(f, horizontal_chunks[1]);
+
+        // modes of manipulate
+        let mode_text = match self.mode {
+            Mode::Normal => " NORMAL ",
+            Mode::Insert => " INSERT ",
+        };
+        let mode_paragraph = Paragraph::new(mode_text)
+            .style(Style::default().fg(Color::White)) //.bg(Color::Black)
+            .alignment(Alignment::Right);
+        f.render_widget(mode_paragraph, main_chunks[1]);
     }
 
     fn render_left_panel(&mut self, f: &mut Frame, area: ratatui::layout::Rect) {
@@ -157,6 +183,18 @@ impl App {
 
     // handle press keys; if app has to be end then return false
     pub fn handle_input(&mut self, key_code: crossterm::event::KeyCode) -> Option<Command> {
+        match (self.mode, key_code) {
+            (Mode::Normal, crossterm::event::KeyCode::Char('i')) => {
+                self.mode = Mode::Insert;
+                return None;
+            }
+            (Mode::Insert, crossterm::event::KeyCode::Esc) => {
+                self.mode = Mode::Normal;
+                return None;
+            }
+            _ => {}
+        }
+
         match &mut self.screen {
             Screen::ChatList { list_state } => {
                 let dialogs = &self.dialogs;
@@ -202,24 +240,37 @@ impl App {
                 None
             }
             Screen::ChatView { peer_id, messages, input, scroll } => {
-                match key_code {
-                    crossterm::event::KeyCode::Backspace => { input.pop(); },
-                    crossterm::event::KeyCode::Char('h') => {
-                        // returning into ChatList
-                        self.screen = Screen::ChatList {
-                            list_state: ListState::default(),
+                match self.mode {
+                    Mode::Normal => {
+                        match key_code {
+                            crossterm::event::KeyCode::Char('h') => {
+                                // returning into ChatList
+                                self.screen = Screen::ChatList {
+                                    list_state: ListState::default(),
+                                };
+                            }
+                            crossterm::event::KeyCode::Char('q') => {
+                                self.running = false;
+                                return None;
+                            }
+                            // crossterm::event::KeyCode::Char('j') => { .. }
+                            // crossterm::event::KeyCode::Char('k') => { .. }
+                            // crossterm::event::KeyCode::Char('l') => { .. }
+                            _ => {}
                         };
+                        None
                     }
-                    crossterm::event::KeyCode::Char('q') => {
-                        self.running = false;
-                        return None;
+                    Mode::Insert => {
+                        match key_code {
+                            crossterm::event::KeyCode::Backspace => { input.pop(); }
+                            crossterm::event::KeyCode::Char(c) => { input.push(c); }
+                            // crossterm::event::KeyCode::Enter => { .. }
+                            _ => {}
+                        };
+                        None
                     }
-                    crossterm::event::KeyCode::Char(c) => { input.push(c); }
-                    _ => {}
-                };
-                None
+                }
             }
         }
-        // None
     }
 }

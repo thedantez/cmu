@@ -3,7 +3,7 @@ mod ui;
 //mod config;
 
 use std::io;
-use crossterm::event::{self, Event, KeyCode};
+use crossterm::event::{self, Event};
 use vk_api::VkClient;
 use ratatui::Terminal;
 use ui::Command;
