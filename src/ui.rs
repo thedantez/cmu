@@ -5,12 +5,11 @@ use ratatui::{
     Frame,
     layout::{Layout, Constraint, Direction}
 };
-use crate::vk_api::{Dialog, Message};
+use crate::vk_api::{Dialog, Message, VkClient};
 
 pub enum Screen {
     ChatList {
         list_state: ListState,
-        dialogs: Vec<Dialog>,
     },
     ChatView {
         peer_id: i64,
@@ -20,34 +19,50 @@ pub enum Screen {
     },
 }
 
+#[derive(Debug)]
+pub enum Command {
+    LoadMessages(i64),
+}
+
 pub struct App {
     pub screen: Screen,
+    pub dialogs: Vec<Dialog>,
     pub min_size: (u16, u16),
+    pub client: VkClient,
+    pub running: bool,
 }
 
 impl App {
-    pub fn new(dialogs: Vec<Dialog>, min_size: (u16, u16)) -> Self {
+    pub fn new(client: VkClient, dialogs: Vec<Dialog>, min_size: (u16, u16)) -> Self {
         let mut list_state = ListState::default();
         if !dialogs.is_empty() {
             list_state.select(Some(0));
         }
         App {
-            screen: Screen::ChatList {
-                list_state,
-                dialogs,
-            },
+            screen: Screen::ChatList { list_state },
+            dialogs,
             min_size,
+            client,
+            running: true,
         }
     }
 
-    /// Отрисовывает весь интерфейс в зависимости от текущего экрана
-    pub fn render(&mut self, f: &mut Frame) {
-        let area = f.area();   // используем area() вместо устаревшего size()
+    pub async fn load_messages(&mut self, peer_id: i64) {
+        if let Ok(messages) = self.client.get_messages(peer_id, 20).await {
+            if let Screen::ChatView { messages: msg_vec, .. } = &mut self.screen {
+                *msg_vec = messages;
+            }
+        }
+    }
 
-        // Проверяем минимальный размер
+    // print ui
+    pub fn render(&mut self, f: &mut Frame) {
+        let area = f.area();
+
+        // check min size
         if area.width < self.min_size.0 || area.height < self.min_size.1 {
             let message = format!(
-                "Минимальный размер: {}x{}; сейчас терминал {}x{}",
+                "minial size: {}x{}; now: {}x{}",
                 self.min_size.0, self.min_size.1, area.width, area.height
             );
             let paragraph = Paragraph::new(message)
@@ -57,7 +72,7 @@ impl App {
             return;
         }
 
-        // Делим экран на левую и правую части
+        // split screen for left & right sides
         let chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
@@ -68,7 +83,7 @@ impl App {
     }
 
     fn render_left_panel(&mut self, f: &mut Frame, area: ratatui::layout::Rect) {
-        // Блок с ASCII-границами
+        // block w/ ASCII-print
         let block = Block::default()
             .borders(Borders::ALL)
             .border_set(symbols::border::Set {
@@ -81,11 +96,11 @@ impl App {
                 horizontal_top: "-",
                 horizontal_bottom: "-",
             })
-            .title(" Чаты ");
+            .title(" chats ");
 
         match &mut self.screen {
-            Screen::ChatList { list_state, dialogs } => {
-                let items: Vec<ListItem> = dialogs
+            Screen::ChatList { list_state } => {
+                let items: Vec<ListItem> = self.dialogs
                     .iter()
                     .map(|d| ListItem::new(d.title.clone()))
                     .collect();
@@ -94,7 +109,14 @@ impl App {
                     .highlight_style(Style::default().reversed());
                 f.render_stateful_widget(list, area, list_state);
             }
-            _ => unreachable!(),
+            // _ => unreachable!(),
+            _ => {
+                let items: Vec<ListItem> = self.dialogs.iter()
+                    .map(|d| ListItem::new(d.title.clone()))
+                    .collect();
+                let list = List::new(items).block(block);
+                f.render_widget(list, area);
+            }
         }
     }
 
@@ -111,11 +133,11 @@ impl App {
                 horizontal_top: "-",
                 horizontal_bottom: "-",
             })
-            .title(" Сообщения ");
+            .title(" messages ");
 
         match &self.screen {
             Screen::ChatList { .. } => {
-                let paragraph = Paragraph::new("Выберите чат слева")
+                let paragraph = Paragraph::new("choose chat from left")
                     .block(block)
                     .centered();
                 f.render_widget(paragraph, area);
@@ -126,17 +148,18 @@ impl App {
                     .map(|m| format!("{}: {}", m.sender_name, m.text))
                     .collect::<Vec<_>>()
                     .join("\n");
-                let content = format!("{}\n\nВвод: {}", msg_text, input);
+                let content = format!("{}\n\ninput: {}", msg_text, input);
                 let paragraph = Paragraph::new(content).block(block);
                 f.render_widget(paragraph, area);
             }
         }
     }
 
-    /// Обработка нажатий клавиш; возвращает false, если приложение должно завершиться
-    pub fn handle_input(&mut self, key_code: crossterm::event::KeyCode) -> bool {
+    // handle press keys; if app has to be end then return false
+    pub fn handle_input(&mut self, key_code: crossterm::event::KeyCode) -> Option<Command> {
         match &mut self.screen {
-            Screen::ChatList { list_state, dialogs } => {
+            Screen::ChatList { list_state } => {
+                let dialogs = &self.dialogs;
                 match key_code {
                     crossterm::event::KeyCode::Char('j') => {
                         let i = match list_state.selected() {
@@ -165,27 +188,38 @@ impl App {
                                     input: String::new(),
                                     scroll: 0,
                                 };
+                                return Some(Command::LoadMessages(dialog.peer_id));
                             }
                         }
+                        // None
                     }
-                    crossterm::event::KeyCode::Char('q') => return false,
+                    crossterm::event::KeyCode::Char('q') =>  {
+                        self.running = false;
+                        return None;
+                    }
                     _ => {}
-                }
+                };
+                None
             }
-            Screen::ChatView { .. } => {
+            Screen::ChatView { peer_id, messages, input, scroll } => {
                 match key_code {
+                    crossterm::event::KeyCode::Backspace => { input.pop(); },
                     crossterm::event::KeyCode::Char('h') => {
-                        // Возврат в список чатов (диалоги нужно сохранить, сейчас временно пустой список)
+                        // returning into ChatList
                         self.screen = Screen::ChatList {
                             list_state: ListState::default(),
-                            dialogs: Vec::new(),
                         };
                     }
-                    crossterm::event::KeyCode::Char('q') => return false,
+                    crossterm::event::KeyCode::Char('q') => {
+                        self.running = false;
+                        return None;
+                    }
+                    crossterm::event::KeyCode::Char(c) => { input.push(c); }
                     _ => {}
-                }
+                };
+                None
             }
         }
-        true
+        // None
     }
 }

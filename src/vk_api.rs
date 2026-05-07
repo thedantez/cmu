@@ -44,6 +44,31 @@ impl VkClient {
         }
         Ok(dialogs)
     }
+
+    pub async fn get_messages(&self, peer_id: i64, count: u32) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
+        let url = format!(
+            "https://api.vk.com/method/messages.getHistory?access_token={}&v=5.199&peer_id={}&count={}",
+            self.token,
+            peer_id,
+            count,
+        );
+        let resp = self.client.get(&url).send().await?.json::<Value>().await?;
+        let items = resp["response"]["items"]
+            .as_array()
+            .ok_or("not found response.items")?;
+        let mut messages = Vec::new();
+        // parsing
+        for item in items {
+            // let sender_name = item["from_id"].ok_or("not found message")?;
+            let text = item["text"].as_str().unwrap_or("").to_string();
+            messages.push(Message {
+                sender_name: "companion".to_string(),
+                text
+            });
+        }
+        Ok(messages)
+    }
+
 }
 
 pub struct Dialog {

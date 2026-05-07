@@ -6,6 +6,7 @@ use std::io;
 use crossterm::event::{self, Event, KeyCode};
 use vk_api::VkClient;
 use ratatui::Terminal;
+use ui::Command;
 
 const MIN_SIZE: (u16, u16) = (80, 30);
 
@@ -22,14 +23,22 @@ async fn main() -> io::Result<()> {
     crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
     let backend = ratatui::backend::CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
-    let mut app = ui::App::new(dialogs, MIN_SIZE);
+    let mut app = ui::App::new(client, dialogs, MIN_SIZE);
 
     loop {
         terminal.draw(|f| app.render(f))?;
         if let Event::Key(key) = event::read()? {
-            if !app.handle_input(key.code) {
-                break;
+            // if !app.handle_input(key.code) {
+            //     break;
+            // }
+            if let Some(cmd) = app.handle_input(key.code) {
+                match cmd {
+                    Command::LoadMessages(peer_id) => {
+                        app.load_messages(peer_id).await;
+                    }
+                }
             }
+            if !app.running { break; }
         }
     }
 
