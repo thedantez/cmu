@@ -11,22 +11,22 @@ ___      ___ ____  ___      _______   ____ ____  _____ ________     ________ ___
 * console messenger for VK w/ vim-like controlling *
 
 app features:
-  > vim-like controlling (h/j/k/l for navi, normal/insert modes)
-  > splitting screen into 2 parts (chats, messages from chat)
-  > moving the cursor through messages
-  > sending & getting messages by VK's API
+  + vim-like controlling (h/j/k/l for navi, normal/insert modes)
+  + splitting screen into 2 parts (chats, messages from chat)
+  + moving the cursor through messages
+  + sending & getting messages by VK's API
 
 vim keybindings:
-  > moving cursor (j/k)
-  > opening chat (l/enter)
-  > close chat (h)
-  > sending message (enter w/ normal mode & opened chat)
-  > change mode to insert (i)
-  > change mode to normal (esc)
-  > quit (q)
+  + moving cursor (j/k)
+  + opening chat (l/enter)
+  + close chat (h)
+  + sending message (enter w/ normal mode & opened chat)
+  + change mode to insert (i)
+  + change mode to normal (esc)
+  + quit (q)
 # installation:
-  > AUR (comming soon)
-  > from code
+  + AUR (comming soon)
+  + from code
         ```bash
         git clone https://github.com/thedantez/vk-rust-tui.git \
         && cd vk-rust-tui/ \
@@ -36,8 +36,8 @@ vim keybindings:
         ```
 
 # dependses & requirements
-  > Rust & Cargo (install from [rustup](https://rustup.rs/))
-  > token from VK (now by yourself, in features would OAuth)
+  + Rust & Cargo (install from [rustup](https://rustup.rs/))
+  + token from VK (now by yourself, in features would OAuth)
 
 badges:
 [![Rust](https://img.shields.io/badge/rust-stable-orange)](https://www.rust-lang.org)
