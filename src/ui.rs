@@ -22,6 +22,7 @@ pub enum Screen {
 #[derive(Debug)]
 pub enum Command {
     LoadMessages(i64),
+    SendMessage(i64, String), // peer_id, text
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -63,6 +64,10 @@ impl App {
         }
     }
 
+    pub async fn send_message(&mut self, peer_id: i64, text: &str) -> Result<(), Box<dyn std::error::Error>> {
+        self.client.send_message(peer_id, text).await
+    }
+
     // print ui
     pub fn render(&mut self, f: &mut Frame) {
         let area = f.area();
@@ -99,12 +104,12 @@ impl App {
 
         // modes of manipulate
         let mode_text = match self.mode {
-            Mode::Normal => " NORMAL ",
-            Mode::Insert => " INSERT ",
+            Mode::Normal => "   NORMAL   ",
+            Mode::Insert => "   INSERT   ",
         };
         let mode_paragraph = Paragraph::new(mode_text)
             .style(Style::default().fg(Color::White)) //.bg(Color::Black)
-            .alignment(Alignment::Right);
+            .alignment(Alignment::Center);
         f.render_widget(mode_paragraph, main_chunks[1]);
     }
 
@@ -264,7 +269,11 @@ impl App {
                         match key_code {
                             crossterm::event::KeyCode::Backspace => { input.pop(); }
                             crossterm::event::KeyCode::Char(c) => { input.push(c); }
-                            // crossterm::event::KeyCode::Enter => { .. }
+                            crossterm::event::KeyCode::Enter => {
+                                let text = input.clone();
+                                input.clear();
+                                return Some(Command::SendMessage(*peer_id, text));
+                            }
                             _ => {}
                         };
                         None

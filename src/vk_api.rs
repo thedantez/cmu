@@ -15,6 +15,23 @@ impl VkClient {
             client: reqwest::Client::new(),
         }
     }
+
+    pub async fn send_message(&self, peer_id: i64, text: &str) -> Result<(), Box<dyn std::error::Error>> {
+        let encoded_text = urlencoding::encode(text);
+        let url = format!(
+            "https://api.vk.com/method/messages.send?access_token={}&v=5.199&peer_id={}&message={}&random_id=0",
+            self.token,
+            peer_id,
+            encoded_text
+        );
+        let resp = self.client.get(&url).send().await?.json::<Value>().await?;
+        if resp["error"].is_object() {
+            Err("VK send error".into())
+        } else {
+            Ok(())
+        }
+    }
+
     pub async fn get_dialogs(&self) -> Result<Vec<Dialog>, Box<dyn std::error::Error>> {
         let url = format!(
             "https://api.vk.com/method/messages.getConversations?access_token={}&v=5.199&count=3",

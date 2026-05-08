@@ -8,7 +8,7 @@ use vk_api::VkClient;
 use ratatui::Terminal;
 use ui::Command;
 
-const MIN_SIZE: (u16, u16) = (80, 30);
+const MIN_SIZE: (u16, u16) = (80, 23);
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
@@ -28,13 +28,17 @@ async fn main() -> io::Result<()> {
     loop {
         terminal.draw(|f| app.render(f))?;
         if let Event::Key(key) = event::read()? {
-            // if !app.handle_input(key.code) {
-            //     break;
-            // }
             if let Some(cmd) = app.handle_input(key.code) {
                 match cmd {
                     Command::LoadMessages(peer_id) => {
                         app.load_messages(peer_id).await;
+                    }
+                    Command::SendMessage(peer_id, text) => {
+                        if let Err(e) = app.send_message(peer_id, &text).await {
+                            eprintln!("error in sending message: {}", e);
+                        } else {
+                            app.load_messages(peer_id).await;
+                        }
                     }
                 }
             }
