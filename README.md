@@ -27,21 +27,21 @@ ___      ___ ____  ___      _______   ____ ____  _____ ________     ________ ___
   + AUR (comming soon)
   + from code
 
-        ```bash
-        git clone https://github.com/thedantez/vk-rust-tui.git
-        cd vk-rust-tui/
-        cargo build --release
+```bash
+git clone https://github.com/thedantez/vk-rust-tui.git
+cd vk-rust-tui/
+cargo build --release
 
-        # start
-        ./target/release/vk-rust-tui
-        ```
+# start
+./target/release/vk-rust-tui
+```
 
 # dependses & requirements
   + Rust & Cargo (install from [rustup](https://rustup.rs/))
   + token from VK (now by yourself, in features would OAuth)
 
-[![Rust](https://img.shields.io/badge/rust-stable-orange)](https://www.rust-lang.org)
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
-[![Github release (latest by date)](https://img.shields.io/github/v/release/thedantez/vk-rust-tui)](https://github.com/thedantez/vk-rust-tui/releases)
-
-
+<div style="text-align: justify;">
+    [![Rust](https://img.shields.io/badge/rust-stable-orange)](https://www.rust-lang.org)
+    [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+    [![Github release (latest by date)](https://img.shields.io/github/v/release/thedantez/vk-rust-tui)](https://github.com/thedantez/vk-rust-tui/releases)
+</div>
