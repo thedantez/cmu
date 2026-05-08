@@ -2,6 +2,7 @@
 
 use reqwest;
 use serde_json::Value;
+use urlencoding;
 
 pub struct VkClient {
     token: String,
@@ -34,7 +35,7 @@ impl VkClient {
 
     pub async fn get_dialogs(&self) -> Result<Vec<Dialog>, Box<dyn std::error::Error>> {
         let url = format!(
-            "https://api.vk.com/method/messages.getConversations?access_token={}&v=5.199&count=3",
+            "https://api.vk.com/method/messages.getConversations?access_token={}&v=5.199&count=40",
             self.token
         );
         let resp = self.client.get(&url).send().await?.json::<Value>().await?;
@@ -83,6 +84,7 @@ impl VkClient {
                 text
             });
         }
+        messages.reverse();
         Ok(messages)
     }
 

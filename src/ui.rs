@@ -3,6 +3,7 @@ use ratatui::{
     style::{Style, Stylize, Color},
     symbols,
     Frame,
+    text::{Line, Span, Text},
     layout::{Layout, Constraint, Direction, Alignment}
 };
 use crate::vk_api::{Dialog, Message, VkClient};
@@ -15,7 +16,10 @@ pub enum Screen {
         peer_id: i64,
         messages: Vec<Message>,
         input: String,
+        selected: usize,
         scroll: usize,
+        cursor_char_idx: usize,
+        input_scroll: usize,
     },
 }
 
@@ -68,6 +72,28 @@ impl App {
         self.client.send_message(peer_id, text).await
     }
 
+    fn update_input_scroll(input: &str, cursor_char_idx: usize, visible_lines: usize, input_scroll: &mut usize) {
+        let lines: Vec<&str> = input.split('\n').collect();
+        let mut remaining_chars = cursor_char_idx;
+        let mut cursor_line = 0;
+        for (i, line) in lines.iter().enumerate() {
+            let char_count = line.chars().count();
+            if remaining_chars <= char_count {
+                cursor_line = i;
+                break;
+            }
+            remaining_chars -= char_count + 1;
+            if i == lines.len() - 1 {
+                cursor_line = i;
+            }
+        }
+        if cursor_line < *input_scroll {
+            *input_scroll = cursor_line;
+        } else if cursor_line >= *input_scroll + visible_lines {
+            *input_scroll = cursor_line - visible_lines + 1;
+        }
+    }
+
     // print ui
     pub fn render(&mut self, f: &mut Frame) {
         let area = f.area();
@@ -86,18 +112,18 @@ impl App {
         }
 
         // split screen for mode, left & right sides
-        let main_chunks = Layout::default()
+        let vertical_chunks = Layout::default()
             .direction(Direction::Vertical)
             .constraints([
                 Constraint::Min(0),
-                Constraint::Length(1),
+                Constraint::Length(1), // for mode
             ])
             .split(area);
 
         let horizontal_chunks = Layout::default()
             .direction(Direction::Horizontal)
             .constraints([Constraint::Percentage(30), Constraint::Percentage(70)])
-            .split(area);
+            .split(vertical_chunks[0]); // was area
 
         self.render_left_panel(f, horizontal_chunks[0]);
         self.render_right_panel(f, horizontal_chunks[1]);
@@ -110,7 +136,7 @@ impl App {
         let mode_paragraph = Paragraph::new(mode_text)
             .style(Style::default().fg(Color::White)) //.bg(Color::Black)
             .alignment(Alignment::Center);
-        f.render_widget(mode_paragraph, main_chunks[1]);
+        f.render_widget(mode_paragraph, vertical_chunks[1]);
     }
 
     fn render_left_panel(&mut self, f: &mut Frame, area: ratatui::layout::Rect) {
@@ -173,15 +199,90 @@ impl App {
                     .centered();
                 f.render_widget(paragraph, area);
             }
-            Screen::ChatView { messages, input, .. } => {
-                let msg_text: String = messages
+            Screen::ChatView { messages, input, selected, scroll, cursor_char_idx, input_scroll, .. } => {
+                let vertical_split = Layout::default()
+                    .direction(Direction::Vertical)
+                    .constraints([
+                        Constraint::Min(0),
+                        Constraint::Length(3),
+                    ])
+                    .split(area);
+                let msg_area = vertical_split[0];
+                let input_area = vertical_split[1];
+
+                // list messages
+                let items: Vec<ListItem> = messages.iter()
+                    .map(|m| ListItem::new(format!("{} : {}", m.sender_name, m.text)))
+                    .collect();
+                let mut list_state = ListState::default()
+                    .with_selected(Some(*selected))
+                    .with_offset(*scroll);
+                // list_state.select_and_offset(Some(*selected), *scroll);
+                let list = List::new(items)
+                    .block(block) // block w/ header "  messages  "
+                    .highlight_style(Style::default().reversed());
+                f.render_stateful_widget(list, msg_area, &mut list_state);
+
+                // input area
+                let input_block = Block::default()
+                    .borders(Borders::ALL)
+                    .title("  input  ");
+
+                let lines: Vec<&str> = input.split('\n').collect();
+                let mut remaining_chars = *cursor_char_idx;
+                let mut cursor_line_idx = 0;
+                let mut cursor_byte_in_line = 0;
+                for (i, line) in lines.iter().enumerate() {
+                    let char_count = line.chars().count();
+                    if remaining_chars <= char_count {
+                        cursor_line_idx = i;
+                        cursor_byte_in_line = line.char_indices()
+                            .nth(remaining_chars)
+                            .map(|(bi, _)| bi)
+                            .unwrap_or(line.len());
+                        break;
+                    }
+                    remaining_chars -= char_count + 1; // +1 cause '\n'
+                    if i == lines.len() - 1 {
+                        cursor_line_idx = i;
+                        cursor_byte_in_line = line.len();
+                    }
+                }
+                let max_visible_lines = (input_area.height as usize).saturating_sub(2); // height -
+                                                                                        // frame
+                let display_lines: Vec<Line> = lines
                     .iter()
-                    .map(|m| format!("{}: {}", m.sender_name, m.text))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                let content = format!("{}\n\ninput: {}", msg_text, input);
-                let paragraph = Paragraph::new(content).block(block);
-                f.render_widget(paragraph, area);
+                    .enumerate()
+                    .skip(*input_scroll)
+                    .take(max_visible_lines)
+                    .map(|(i, line)| {
+                        if i == cursor_line_idx {
+                            let before = &line[..cursor_byte_in_line.min(line.len())];
+                            let cursor_char = if cursor_byte_in_line < line.len() {
+                                let ch = line[cursor_byte_in_line..].chars().next().unwrap_or(' ');
+                                &line[cursor_byte_in_line..cursor_byte_in_line + ch.len_utf8()]
+                            } else {
+                                " "
+                            };
+                            let after = if cursor_byte_in_line < line.len() {
+                                let ch = line[cursor_byte_in_line..].chars().next().unwrap_or(' ');
+                                let next_byte = cursor_byte_in_line + ch.len_utf8();
+                                &line[next_byte..]
+                            } else {
+                                ""
+                            };
+                            Line::from(vec![
+                                Span::raw(before),
+                                Span::styled(cursor_char, Style::default().bg(Color::White).fg(Color::Black)),
+                                Span::raw(after),
+                            ])
+                        } else {
+                            Line::from(Span::raw(*line))
+                        }
+                    })
+                    .collect();
+                let text = Text::from(display_lines);
+                f.render_widget(Paragraph::new(text).block(input_block), input_area);
             }
         }
     }
@@ -230,6 +331,9 @@ impl App {
                                     messages: Vec::new(),
                                     input: String::new(),
                                     scroll: 0,
+                                    selected: 0,
+                                    cursor_char_idx: 0,
+                                    input_scroll: 0,
                                 };
                                 return Some(Command::LoadMessages(dialog.peer_id));
                             }
@@ -244,7 +348,7 @@ impl App {
                 };
                 None
             }
-            Screen::ChatView { peer_id, messages, input, scroll } => {
+            Screen::ChatView { peer_id, messages, input, scroll, selected, cursor_char_idx, input_scroll } => {
                 match self.mode {
                     Mode::Normal => {
                         match key_code {
@@ -258,17 +362,19 @@ impl App {
                                 self.running = false;
                                 return None;
                             }
-                            // crossterm::event::KeyCode::Char('j') => { .. }
-                            // crossterm::event::KeyCode::Char('k') => { .. }
+                            crossterm::event::KeyCode::Char('j') => {
+                                if *selected + 1 < messages.len() {
+                                    *selected += 1;
+                                }
+                                *scroll = *selected;
+                            }
+                            crossterm::event::KeyCode::Char('k') => {
+                                if *selected > 0 {
+                                    *selected -= 1;
+                                }
+                                *scroll = *selected;
+                            }
                             // crossterm::event::KeyCode::Char('l') => { .. }
-                            _ => {}
-                        };
-                        None
-                    }
-                    Mode::Insert => {
-                        match key_code {
-                            crossterm::event::KeyCode::Backspace => { input.pop(); }
-                            crossterm::event::KeyCode::Char(c) => { input.push(c); }
                             crossterm::event::KeyCode::Enter => {
                                 let text = input.clone();
                                 input.clear();
@@ -276,6 +382,53 @@ impl App {
                             }
                             _ => {}
                         };
+                        None
+                    }
+                    Mode::Insert => {
+                        match key_code {
+                            crossterm::event::KeyCode::Backspace => {
+                                if *cursor_char_idx > 0 {
+                                    let byte_pos = input.char_indices()
+                                        .take(*cursor_char_idx)
+                                        .last()
+                                        .map(|(i, _)| i)
+                                        .unwrap();
+                                    input.remove(byte_pos);
+                                    *cursor_char_idx -= 1;
+                                }
+                            }
+                            crossterm::event::KeyCode::Delete => {
+                                if *cursor_char_idx < input.chars().count() {
+                                    let byte_pos = input.char_indices()
+                                        .nth(*cursor_char_idx)
+                                        .map(|(i, _)| i)
+                                        .unwrap_or(input.len());
+                                    input.remove(byte_pos);
+                                }
+                            }
+                            crossterm::event::KeyCode::End => { *cursor_char_idx = input.chars().count(); }
+                            crossterm::event::KeyCode::Home => { *cursor_char_idx = 0; }
+                            crossterm::event::KeyCode::Enter => {
+                                input.insert(*cursor_char_idx, '\n');
+                                *cursor_char_idx += 1;
+                            }
+                            crossterm::event::KeyCode::Left => {
+                                if *cursor_char_idx > 0 { *cursor_char_idx -= 1; }
+                            }
+                            crossterm::event::KeyCode::Right => {
+                                if *cursor_char_idx < input.chars().count() { *cursor_char_idx += 1; }
+                            }
+                            crossterm::event::KeyCode::Char(c) => {
+                                let byte_pos = input.char_indices()
+                                    .nth(*cursor_char_idx)
+                                    .map(|(i, _)| i)
+                                    .unwrap_or(input.len());
+                                input.insert(byte_pos, c);
+                                *cursor_char_idx += 1;
+                            }
+                            _ => {}
+                        };
+                        Self::update_input_scroll(input, *cursor_char_idx, 1, input_scroll);
                         None
                     }
                 }
