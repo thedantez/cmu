@@ -26,6 +26,7 @@ ___      ___ ____  ___      _______   ____ ____  _____ ________     ________ ___
 # installation:
   + AUR (comming soon)
   + from code
+
         ```bash
         git clone https://github.com/thedantez/vk-rust-tui.git
         && cd vk-rust-tui/
