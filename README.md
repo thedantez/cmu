@@ -29,10 +29,11 @@ ___      ___ ____  ___      _______   ____ ____  _____ ________     ________ ___
 
         ```bash
         git clone https://github.com/thedantez/vk-rust-tui.git
-        && cd vk-rust-tui/
-        && cargo build --release
+        cd vk-rust-tui/
+        cargo build --release
+
         # start
-        && ./target/release/vk-rust-tui
+        ./target/release/vk-rust-tui
         ```
 
 # dependses & requirements
