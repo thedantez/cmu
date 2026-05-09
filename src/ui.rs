@@ -1,3 +1,4 @@
+use crossterm::event::KeyCode;
 use ratatui::{
     widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
     style::{Style, Stylize, Color},
@@ -6,8 +7,10 @@ use ratatui::{
     text::{Line, Span, Text},
     layout::{Layout, Constraint, Direction, Alignment}
 };
+use crate::config::{Config, load_config};
 use crate::vk_api::{Dialog, Message, VkClient};
 
+#[derive(Clone)]
 pub enum Screen {
     ChatList {
         list_state: ListState,
@@ -39,9 +42,9 @@ pub struct App {
     pub screen: Screen,
     pub dialogs: Vec<Dialog>,
     pub min_size: (u16, u16),
-    pub client: VkClient,
-    pub running: bool,
+    pub client: VkClient, pub running: bool,
     pub mode: Mode,
+    pub config: Config
 }
 
 impl App {
@@ -57,6 +60,7 @@ impl App {
             client,
             running: true,
             mode: Mode::Normal,
+            config: load_config(),
         }
     }
 
@@ -287,106 +291,102 @@ impl App {
         }
     }
 
-    // handle press keys; if app has to be end then return false
-    pub fn handle_input(&mut self, key_code: crossterm::event::KeyCode) -> Option<Command> {
-        match (self.mode, key_code) {
-            (Mode::Normal, crossterm::event::KeyCode::Char('i')) => {
-                self.mode = Mode::Insert;
-                return None;
-            }
-            (Mode::Insert, crossterm::event::KeyCode::Esc) => {
-                self.mode = Mode::Normal;
-                return None;
-            }
-            _ => {}
+    // Process key input
+    pub fn handle_input(&mut self, key_code: KeyCode) -> Option<Command> {
+        // Global bindings
+        if self.config.keys.quit == key_code {
+            self.running = false;
+            return None;
         }
 
-        match &mut self.screen {
+        // Mode keybinds
+        match self.mode {
+            Mode::Normal => {
+                if self.config.keys.to_insert_mode == key_code {
+                    self.mode = Mode::Insert;
+                    return None;
+                }
+            }
+            Mode::Insert => {
+                if self.config.keys.to_normal_mode == key_code {
+                    self.mode = Mode::Normal;
+                    return None;
+                }
+            }
+        }
+
+        // Bindings for specific types of screens
+        match &mut self.screen.clone() {
             Screen::ChatList { list_state } => {
                 let dialogs = &self.dialogs;
-                match key_code {
-                    crossterm::event::KeyCode::Char('j') => {
-                        let i = match list_state.selected() {
-                            Some(i) => {
-                                if i >= dialogs.len() - 1 { 0 } else { i + 1 }
-                            }
-                            None => 0,
-                        };
-                        list_state.select(Some(i));
-                    }
-                    crossterm::event::KeyCode::Char('k') => {
-                        let i = match list_state.selected() {
-                            Some(i) => {
-                                if i == 0 { dialogs.len() - 1 } else { i - 1 }
-                            }
-                            None => 0,
-                        };
-                        list_state.select(Some(i));
-                    }
-                    crossterm::event::KeyCode::Char('l') => {
-                        if let Some(selected) = list_state.selected() {
-                            if let Some(dialog) = dialogs.get(selected) {
-                                self.screen = Screen::ChatView {
-                                    peer_id: dialog.peer_id,
-                                    messages: Vec::new(),
-                                    input: String::new(),
-                                    scroll: 0,
-                                    selected: 0,
-                                    cursor_char_idx: 0,
-                                    input_scroll: 0,
-                                };
-                                return Some(Command::LoadMessages(dialog.peer_id));
-                            }
+                if self.config.keys.move_up_list == key_code {
+                    let i = match list_state.selected() {
+                        Some(i) => {
+                            if i >= dialogs.len() - 1 { 0 } else { i + 1 }
                         }
-                        // None
+                        None => 0,
+                    };
+                    list_state.select(Some(i));
+                }
+                if self.config.keys.move_down_list == key_code {
+                    let i = match list_state.selected() {
+                        Some(i) => {
+                            if i == 0 { dialogs.len() - 1 } else { i - 1 }
+                        }
+                        None => 0,
+                    };
+                    list_state.select(Some(i));
+                }
+                if [self.config.keys.enter_chat, self.config.keys.enter_chat_secondary].contains(&key_code) {
+                    if let Some(selected) = list_state.selected() {
+                        if let Some(dialog) = dialogs.get(selected) {
+                            self.screen = Screen::ChatView {
+                                peer_id: dialog.peer_id,
+                                messages: Vec::new(),
+                                input: String::new(),
+                                scroll: 0,
+                                selected: 0,
+                                cursor_char_idx: 0,
+                                input_scroll: 0,
+                            };
+                            return Some(Command::LoadMessages(dialog.peer_id));
+                        }
                     }
-                    crossterm::event::KeyCode::Char('q') =>  {
-                        self.running = false;
-                        return None;
-                    }
-                    _ => {}
-                };
+                }
+
                 None
             }
+
             Screen::ChatView { peer_id, messages, input, scroll, selected, cursor_char_idx, input_scroll } => {
                 match self.mode {
                     Mode::Normal => {
-                        match key_code {
-                            crossterm::event::KeyCode::Char('h') => {
-                                // returning into ChatList
-                                self.screen = Screen::ChatList {
-                                    list_state: ListState::default(),
-                                };
+                        if self.config.keys.view_chat_list == key_code {
+                            self.screen = Screen::ChatList {
+                                list_state: ListState::default(),
+                            };
+                        }
+                        if self.config.keys.move_down_list == key_code {
+                            if *selected + 1 < messages.len() {
+                                *selected += 1;
                             }
-                            crossterm::event::KeyCode::Char('q') => {
-                                self.running = false;
-                                return None;
+                            *scroll = *selected;
+                        }
+                        if self.config.keys.move_up_list == key_code {
+                            if *selected > 0 {
+                                *selected -= 1;
                             }
-                            crossterm::event::KeyCode::Char('j') => {
-                                if *selected + 1 < messages.len() {
-                                    *selected += 1;
-                                }
-                                *scroll = *selected;
-                            }
-                            crossterm::event::KeyCode::Char('k') => {
-                                if *selected > 0 {
-                                    *selected -= 1;
-                                }
-                                *scroll = *selected;
-                            }
-                            // crossterm::event::KeyCode::Char('l') => { .. }
-                            crossterm::event::KeyCode::Enter => {
-                                let text = input.clone();
-                                input.clear();
-                                return Some(Command::SendMessage(*peer_id, text));
-                            }
-                            _ => {}
-                        };
+                            *scroll = *selected;
+                        }
+                        if let KeyCode::Enter = key_code {
+                            let text = input.clone();
+                            input.clear();
+                            return Some(Command::SendMessage(*peer_id, text));
+                        }
                         None
                     }
                     Mode::Insert => {
                         match key_code {
-                            crossterm::event::KeyCode::Backspace => {
+                            KeyCode::Backspace => {
                                 if *cursor_char_idx > 0 {
                                     let byte_pos = input.char_indices()
                                         .take(*cursor_char_idx)
@@ -397,7 +397,7 @@ impl App {
                                     *cursor_char_idx -= 1;
                                 }
                             }
-                            crossterm::event::KeyCode::Delete => {
+                            KeyCode::Delete => {
                                 if *cursor_char_idx < input.chars().count() {
                                     let byte_pos = input.char_indices()
                                         .nth(*cursor_char_idx)
@@ -406,19 +406,19 @@ impl App {
                                     input.remove(byte_pos);
                                 }
                             }
-                            crossterm::event::KeyCode::End => { *cursor_char_idx = input.chars().count(); }
-                            crossterm::event::KeyCode::Home => { *cursor_char_idx = 0; }
-                            crossterm::event::KeyCode::Enter => {
+                            KeyCode::End => { *cursor_char_idx = input.chars().count(); }
+                            KeyCode::Home => { *cursor_char_idx = 0; }
+                            KeyCode::Enter => {
                                 input.insert(*cursor_char_idx, '\n');
                                 *cursor_char_idx += 1;
                             }
-                            crossterm::event::KeyCode::Left => {
+                            KeyCode::Left => {
                                 if *cursor_char_idx > 0 { *cursor_char_idx -= 1; }
                             }
-                            crossterm::event::KeyCode::Right => {
+                            KeyCode::Right => {
                                 if *cursor_char_idx < input.chars().count() { *cursor_char_idx += 1; }
                             }
-                            crossterm::event::KeyCode::Char(c) => {
+                            KeyCode::Char(c) => {
                                 let byte_pos = input.char_indices()
                                     .nth(*cursor_char_idx)
                                     .map(|(i, _)| i)
