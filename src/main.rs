@@ -1,6 +1,6 @@
 mod vk_api;
 mod ui;
-//mod config;
+mod config;
 
 use std::io;
 use crossterm::event::{self, Event};
@@ -12,12 +12,12 @@ const MIN_SIZE: (u16, u16) = (80, 23);
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let token = "vk1.a.1wOvxYOFAFijemO8VNUkDl1SjwPagbbzz71kSvtdNQmimc8GFEZIAwHt1Lgkwdz72gR6rLgpqyalY0UUcAUz6hGU5-8bGFjkMGhCSEIvhx9rvoR1SPuq51Br02lmGE9LDZ25Vxb5GOgRfucpMiRsd2QK2_Iy0shPZfPgwJOEDzSMJGaovLKZ_JmHwJeBvcXpK3xAwPx-iy3I_1P6MF6gjw";
+    let token = "";
     let client = VkClient::new(token.to_string());
     let dialogs = client.get_dialogs().await
-        .expect("error in loading dialogs");
+        .expect("Error loading dialogs: ");
 
-    // setting terminal
+    // Loading the app
     let mut stdout = io::stdout();
     crossterm::terminal::enable_raw_mode()?;
     crossterm::execute!(stdout, crossterm::terminal::EnterAlternateScreen)?;
@@ -35,7 +35,7 @@ async fn main() -> io::Result<()> {
                     }
                     Command::SendMessage(peer_id, text) => {
                         if let Err(e) = app.send_message(peer_id, &text).await {
-                            eprintln!("error in sending message: {}", e);
+                            eprintln!("Error sending a message: {}", e);
                         } else {
                             app.load_messages(peer_id).await;
                         }
@@ -46,7 +46,7 @@ async fn main() -> io::Result<()> {
         }
     }
 
-    // returning to default terminal
+    // Returning to default terminal and exiting the app
     crossterm::terminal::disable_raw_mode()?;
     crossterm::execute!(terminal.backend_mut(), crossterm::terminal::LeaveAlternateScreen)?;
     Ok(())

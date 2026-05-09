@@ -95,6 +95,7 @@ pub struct Dialog {
     pub peer_id: i64,
 }
 
+#[derive(Clone)]
 pub struct Message {
     pub sender_name: String,
     pub text: String,
