@@ -1,23 +1,22 @@
 //  api calls to api.vk.com
-
-use reqwest;
-use serde_json::Value;
+use reqwest; use serde_json::Value;
 use urlencoding;
+use crate::client::{Client, Message, Dialog};
 
 pub struct VkClient {
     token: String,
     client: reqwest::Client,
 }
 
-impl VkClient {
-    pub fn new(token: String) -> Self {
+impl Client for VkClient {
+    fn new(token: String) -> Self {
         VkClient {
             token,
             client: reqwest::Client::new(),
         }
     }
 
-    pub async fn send_message(&self, peer_id: i64, text: &str) -> Result<(), Box<dyn std::error::Error>> {
+    async fn send_message(&self, peer_id: i64, text: &str) -> Result<(), Box<dyn std::error::Error>> {
         let encoded_text = urlencoding::encode(text);
         let url = format!(
             "https://api.vk.com/method/messages.send?access_token={}&v=5.199&peer_id={}&message={}&random_id=0",
@@ -27,13 +26,13 @@ impl VkClient {
         );
         let resp = self.client.get(&url).send().await?.json::<Value>().await?;
         if resp["error"].is_object() {
-            Err("VK send error".into())
+            Err("VK sending message error".into())
         } else {
             Ok(())
         }
     }
 
-    pub async fn get_dialogs(&self) -> Result<Vec<Dialog>, Box<dyn std::error::Error>> {
+    async fn get_dialogs(&self) -> Result<Vec<Dialog>, Box<dyn std::error::Error>> {
         let url = format!(
             "https://api.vk.com/method/messages.getConversations?access_token={}&v=5.199&count=40",
             self.token
@@ -52,7 +51,7 @@ impl VkClient {
                     .and_then(|v| v.as_str())
                     .unwrap_or("w/out title")
             } else {
-                "myselft chat"
+                "Default chat"
             };
             let dialog = Dialog {
                 peer_id,
@@ -63,7 +62,7 @@ impl VkClient {
         Ok(dialogs)
     }
 
-    pub async fn get_messages(&self, peer_id: i64, count: u32) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
+    async fn get_messages(&self, peer_id: i64, count: u32) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
         let url = format!(
             "https://api.vk.com/method/messages.getHistory?access_token={}&v=5.199&peer_id={}&count={}",
             self.token,
@@ -88,15 +87,8 @@ impl VkClient {
         Ok(messages)
     }
 
-}
-
-pub struct Dialog {
-    pub title: String,
-    pub peer_id: i64,
-}
-
-#[derive(Clone)]
-pub struct Message {
-    pub sender_name: String,
-    pub text: String,
+    async fn auth(&self) {
+        // TODO: Создать аутентификацию для вк
+        println!("Auth is not implemented!")
+    }
 }

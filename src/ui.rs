@@ -7,8 +7,10 @@ use ratatui::{
     text::{Line, Span, Text},
     layout::{Layout, Constraint, Direction, Alignment}
 };
-use crate::config::{Config, load_config};
-use crate::vk_api::{Dialog, Message, VkClient};
+use crate::config::{Config};
+use crate::vk_api::{VkClient};
+use crate::navigation::{Mode, typing};
+use crate::client::{Dialog, Message, Client};
 
 #[derive(Clone)]
 pub enum Screen {
@@ -26,18 +28,6 @@ pub enum Screen {
     },
 }
 
-#[derive(Debug)]
-pub enum Command {
-    LoadMessages(i64),
-    SendMessage(i64, String), // peer_id, text
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum Mode {
-    Normal,
-    Insert,
-}
-
 pub struct App {
     pub screen: Screen,
     pub dialogs: Vec<Dialog>,
@@ -48,7 +38,7 @@ pub struct App {
 }
 
 impl App {
-    pub fn new(client: VkClient, dialogs: Vec<Dialog>, min_size: (u16, u16)) -> Self {
+    pub fn new(client: VkClient, dialogs: Vec<Dialog>, min_size: (u16, u16), conf: Config) -> Self {
         let mut list_state = ListState::default();
         if !dialogs.is_empty() {
             list_state.select(Some(0));
@@ -60,7 +50,7 @@ impl App {
             client,
             running: true,
             mode: Mode::Normal,
-            config: load_config(),
+            config: conf,
         }
     }
 
@@ -72,8 +62,12 @@ impl App {
         }
     }
 
-    pub async fn send_message(&mut self, peer_id: i64, text: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.client.send_message(peer_id, text).await
+    pub async fn send_message(&mut self, peer_id: i64, text: &str) {
+        if let Err(e) = self.client.send_message(peer_id, &text).await {
+            eprintln!("Error sending a message: {}", e);
+        } else {
+            self.load_messages(peer_id).await;
+        }
     }
 
     fn update_input_scroll(input: &str, cursor_char_idx: usize, visible_lines: usize, input_scroll: &mut usize) {
@@ -232,8 +226,7 @@ impl App {
                     .borders(Borders::ALL)
                     .title("  input  ");
 
-                let lines: Vec<&str> = input.split('\n').collect();
-                let mut remaining_chars = *cursor_char_idx;
+                let lines: Vec<&str> = input.split('\n').collect(); let mut remaining_chars = *cursor_char_idx;
                 let mut cursor_line_idx = 0;
                 let mut cursor_byte_in_line = 0;
                 for (i, line) in lines.iter().enumerate() {
@@ -292,11 +285,10 @@ impl App {
     }
 
     // Process key input
-    pub fn handle_input(&mut self, key_code: KeyCode) -> Option<Command> {
-        // Global bindings
+    pub async fn handle_input(&mut self, key_code: KeyCode) {
+        // Global key bindings
         if self.config.keys.quit == key_code {
             self.running = false;
-            return None;
         }
 
         // Mode keybinds
@@ -304,18 +296,16 @@ impl App {
             Mode::Normal => {
                 if self.config.keys.to_insert_mode == key_code {
                     self.mode = Mode::Insert;
-                    return None;
                 }
             }
             Mode::Insert => {
                 if self.config.keys.to_normal_mode == key_code {
                     self.mode = Mode::Normal;
-                    return None;
                 }
             }
         }
 
-        // Bindings for specific types of screens
+        // Key bindings for specific types of screens
         match &mut self.screen.clone() {
             Screen::ChatList { list_state } => {
                 let dialogs = &self.dialogs;
@@ -349,12 +339,9 @@ impl App {
                                 cursor_char_idx: 0,
                                 input_scroll: 0,
                             };
-                            return Some(Command::LoadMessages(dialog.peer_id));
                         }
                     }
                 }
-
-                None
             }
 
             Screen::ChatView { peer_id, messages, input, scroll, selected, cursor_char_idx, input_scroll } => {
@@ -380,56 +367,13 @@ impl App {
                         if let KeyCode::Enter = key_code {
                             let text = input.clone();
                             input.clear();
-                            return Some(Command::SendMessage(*peer_id, text));
+                            self.send_message(*peer_id, &text).await;
                         }
-                        None
                     }
+
                     Mode::Insert => {
-                        match key_code {
-                            KeyCode::Backspace => {
-                                if *cursor_char_idx > 0 {
-                                    let byte_pos = input.char_indices()
-                                        .take(*cursor_char_idx)
-                                        .last()
-                                        .map(|(i, _)| i)
-                                        .unwrap();
-                                    input.remove(byte_pos);
-                                    *cursor_char_idx -= 1;
-                                }
-                            }
-                            KeyCode::Delete => {
-                                if *cursor_char_idx < input.chars().count() {
-                                    let byte_pos = input.char_indices()
-                                        .nth(*cursor_char_idx)
-                                        .map(|(i, _)| i)
-                                        .unwrap_or(input.len());
-                                    input.remove(byte_pos);
-                                }
-                            }
-                            KeyCode::End => { *cursor_char_idx = input.chars().count(); }
-                            KeyCode::Home => { *cursor_char_idx = 0; }
-                            KeyCode::Enter => {
-                                input.insert(*cursor_char_idx, '\n');
-                                *cursor_char_idx += 1;
-                            }
-                            KeyCode::Left => {
-                                if *cursor_char_idx > 0 { *cursor_char_idx -= 1; }
-                            }
-                            KeyCode::Right => {
-                                if *cursor_char_idx < input.chars().count() { *cursor_char_idx += 1; }
-                            }
-                            KeyCode::Char(c) => {
-                                let byte_pos = input.char_indices()
-                                    .nth(*cursor_char_idx)
-                                    .map(|(i, _)| i)
-                                    .unwrap_or(input.len());
-                                input.insert(byte_pos, c);
-                                *cursor_char_idx += 1;
-                            }
-                            _ => {}
-                        };
+                        typing(input, cursor_char_idx, key_code);
                         Self::update_input_scroll(input, *cursor_char_idx, 1, input_scroll);
-                        None
                     }
                 }
             }
