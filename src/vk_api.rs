@@ -2,13 +2,15 @@
 use reqwest; use serde_json::Value;
 use urlencoding;
 use crate::client::{Client, Message, Dialog};
+use async_trait::async_trait;
+
 
 pub struct VkClient {
     token: String,
     client: reqwest::Client,
 }
 
-impl Client for VkClient {
+impl VkClient {
     fn new(token: String) -> Self {
         VkClient {
             token,
@@ -16,8 +18,13 @@ impl Client for VkClient {
         }
     }
 
-    async fn send_message(&self, peer_id: i64, text: &str) -> Result<(), Box<dyn std::error::Error>> {
-        let encoded_text = urlencoding::encode(text);
+}
+
+
+#[async_trait]
+impl Client for VkClient {
+    async fn send_message(&self, peer_id: i64, text: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+        let encoded_text = urlencoding::encode(&text);
         let url = format!(
             "https://api.vk.com/method/messages.send?access_token={}&v=5.199&peer_id={}&message={}&random_id=0",
             self.token,
@@ -32,7 +39,7 @@ impl Client for VkClient {
         }
     }
 
-    async fn get_dialogs(&self) -> Result<Vec<Dialog>, Box<dyn std::error::Error>> {
+    async fn get_dialogs(&self) -> Result<Vec<Dialog>, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
             "https://api.vk.com/method/messages.getConversations?access_token={}&v=5.199&count=40",
             self.token
@@ -62,7 +69,7 @@ impl Client for VkClient {
         Ok(dialogs)
     }
 
-    async fn get_messages(&self, peer_id: i64, count: u32) -> Result<Vec<Message>, Box<dyn std::error::Error>> {
+    async fn get_messages(&self, peer_id: i64, count: u32) -> Result<Vec<Message>, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
             "https://api.vk.com/method/messages.getHistory?access_token={}&v=5.199&peer_id={}&count={}",
             self.token,

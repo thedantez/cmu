@@ -32,13 +32,14 @@ pub struct App {
     pub screen: Screen,
     pub dialogs: Vec<Dialog>,
     pub min_size: (u16, u16),
-    pub client: VkClient, pub running: bool,
+    pub client: Box<dyn Client>, 
+    pub running: bool,
     pub mode: Mode,
     pub config: Config
 }
 
 impl App {
-    pub fn new(client: VkClient, dialogs: Vec<Dialog>, min_size: (u16, u16), conf: Config) -> Self {
+    pub fn new(client: Box<dyn Client>, dialogs: Vec<Dialog>, min_size: (u16, u16), conf: Config) -> Self {
         let mut list_state = ListState::default();
         if !dialogs.is_empty() {
             list_state.select(Some(0));

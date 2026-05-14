@@ -3,6 +3,7 @@ mod ui;
 mod config;
 mod navigation;
 mod client;
+mod test_client;
 
 use std::io;
 use crossterm::event::{self, Event};
@@ -10,6 +11,7 @@ use vk_api::VkClient;
 use ratatui::Terminal;
 use config::{Config, load_config};
 use client::{Client};
+use test_client::TestClient;
 
 const MIN_SIZE: (u16, u16) = (80, 23);
 
@@ -17,7 +19,7 @@ const MIN_SIZE: (u16, u16) = (80, 23);
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let conf: Config = load_config();
-    let client = VkClient::new(conf.token.to_string());
+    let client = Box::new(TestClient::new(conf.token.to_string()));
     let dialogs = client.get_dialogs().await
         .expect("Error loading dialogs: ");
 
