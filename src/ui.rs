@@ -8,9 +8,16 @@ use ratatui::{
     layout::{Layout, Constraint, Direction, Alignment}
 };
 use crate::config::{Config};
-use crate::vk_api::{VkClient};
 use crate::navigation::{Mode, typing};
 use crate::client::{Dialog, Message, Client};
+
+
+// Used to prevent double mutable borrowing of self
+#[derive(Debug)]
+pub enum Command {
+    LoadMessages(i64),
+    SendMessage(i64, String), // peer_id, text
+}
 
 #[derive(Clone)]
 pub enum Screen {
@@ -286,10 +293,11 @@ impl App {
     }
 
     // Process key input
-    pub async fn handle_input(&mut self, key_code: KeyCode) {
+    pub fn handle_input(&mut self, key_code: KeyCode) -> Option<Command> {
         // Global key bindings
         if self.config.keys.quit == key_code {
             self.running = false;
+            return None;
         }
 
         // Mode keybinds
@@ -297,29 +305,31 @@ impl App {
             Mode::Normal => {
                 if self.config.keys.to_insert_mode == key_code {
                     self.mode = Mode::Insert;
+                    return None;
                 }
             }
             Mode::Insert => {
                 if self.config.keys.to_normal_mode == key_code {
                     self.mode = Mode::Normal;
+                    return None;
                 }
             }
         }
 
         // Key bindings for specific types of screens
-        match &mut self.screen.clone() {
+        match &mut self.screen {
             Screen::ChatList { list_state } => {
                 let dialogs = &self.dialogs;
-                if self.config.keys.move_up_list == key_code {
+                if self.config.keys.move_down_list == key_code {
                     let i = match list_state.selected() {
-                        Some(i) => {
-                            if i >= dialogs.len() - 1 { 0 } else { i + 1 }
+                        Some(j) => {
+                            if j >= dialogs.len() - 1 { 0 } else { j + 1 }
                         }
                         None => 0,
                     };
                     list_state.select(Some(i));
                 }
-                if self.config.keys.move_down_list == key_code {
+                if self.config.keys.move_up_list == key_code {
                     let i = match list_state.selected() {
                         Some(i) => {
                             if i == 0 { dialogs.len() - 1 } else { i - 1 }
@@ -340,19 +350,16 @@ impl App {
                                 cursor_char_idx: 0,
                                 input_scroll: 0,
                             };
+                            return Some(Command::LoadMessages(dialog.peer_id));
                         }
                     }
                 }
+                None
             }
 
             Screen::ChatView { peer_id, messages, input, scroll, selected, cursor_char_idx, input_scroll } => {
                 match self.mode {
                     Mode::Normal => {
-                        if self.config.keys.view_chat_list == key_code {
-                            self.screen = Screen::ChatList {
-                                list_state: ListState::default(),
-                            };
-                        }
                         if self.config.keys.move_down_list == key_code {
                             if *selected + 1 < messages.len() {
                                 *selected += 1;
@@ -368,13 +375,23 @@ impl App {
                         if let KeyCode::Enter = key_code {
                             let text = input.clone();
                             input.clear();
-                            self.send_message(*peer_id, &text).await;
+                            return Some(Command::SendMessage(*peer_id, text));
                         }
+
+                        // Смена экрана должна быть в конце, чтобы освободить self.screen до
+                        // присвоения
+                        if self.config.keys.view_chat_list == key_code {
+                            self.screen = Screen::ChatList {
+                                list_state: ListState::default(),
+                            };
+                        }
+                        None
                     }
 
                     Mode::Insert => {
                         typing(input, cursor_char_idx, key_code);
                         Self::update_input_scroll(input, *cursor_char_idx, 1, input_scroll);
+                        None
                     }
                 }
             }

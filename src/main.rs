@@ -12,6 +12,7 @@ use ratatui::Terminal;
 use config::{Config, load_config};
 use client::{Client};
 use test_client::TestClient;
+use ui::Command;
 
 const MIN_SIZE: (u16, u16) = (80, 23);
 
@@ -35,7 +36,16 @@ async fn main() -> io::Result<()> {
         terminal.draw(|f| app.render(f))?;
         // Processing key input
         if let Event::Key(key) = event::read()? {
-            app.handle_input(key.code).await;
+            if let Some(cmd) = app.handle_input(key.code) {
+                match cmd {
+                    Command::LoadMessages(peer_id) => {
+                        app.load_messages(peer_id).await;
+                    }
+                    Command::SendMessage(peer_id, text) => {
+                        app.send_message(peer_id, &text).await;
+                    }
+                }
+            }
         }
     }
 
