@@ -8,7 +8,7 @@ const PLACEHOLDERS: [&str; 10] = ["Привет", "Пока", "Как дела",
 
 pub struct TestClient {
     dialog_count: u16,
-    messages: Vec<Message>, 
+    messages: Vec<Message>,
 }
 
 impl TestClient {
@@ -58,7 +58,7 @@ impl Client for TestClient {
         Ok(())
     }
 
-    async fn auth(&self) {}
+//    async fn auth(&self) {}
 }
 
 

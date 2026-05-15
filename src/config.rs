@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
-    pub token: String,
+    pub token: Option<String>,
     pub min_width: u16,
     pub min_height: u16,
     pub keys: KeyBindings,
@@ -14,7 +14,7 @@ pub struct Config {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct KeyBindings{
-    // Global 
+    // Global
     pub command: KeyCode,
     pub quit: KeyCode,
 
@@ -43,7 +43,7 @@ pub struct KeyBindings{
 impl Default for Config {
     fn default() -> Self {
         Self {
-            token: generate_token(),
+            token: None,
             min_width: 300,
             min_height: 300,
             keys: KeyBindings::default()
@@ -56,7 +56,7 @@ impl Default for Config {
 impl Default for KeyBindings {
     fn default() -> Self {
         Self {
-            // Global 
+            // Global
             command: KeyCode::Char(':'),
             quit: KeyCode::Char('q'),
 
@@ -82,15 +82,18 @@ impl Default for KeyBindings {
     }
 }
 
+fn get_config_path() -> PathBuf {
+    dirs::config_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join("vk-rust-tui")
+        .join("config.toml")
+}
 
 pub fn load_config() -> Config {
     // Extracting config struct from config file
-    let mut config: Config;
-    let config_path = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("vk-rust-tui")
-        .join("config.toml");
-    if config_path.exists() {
+    let config: Config;
+    let config_path = get_config_path();
+        if config_path.exists() {
         let content = fs::read_to_string(&config_path)
             .expect("error w/ loading config.toml");
         config = toml::from_str(&content).unwrap_or_else(|_| Config::default());
@@ -99,17 +102,27 @@ pub fn load_config() -> Config {
     }
 
     // Token validation
-    if "".to_string() == config.token {
-        config.token = generate_token();
-    }
+    //if "".to_string() == config.token {
+    //    config.token = generate_token();
+    //}
     // TODO: Сделать валидацию для непустого токена через авторизатор
     config
 }
 
-
-pub fn generate_token() -> String {
-    // TODO: Сделать авторизацию пользователя
-    "".to_string()
+pub fn save_config(config: &Config) {
+    let config_path = get_config_path();
+    if let Some(parent) = config_path.parent() {
+        fs::create_dir_all(parent).ok();
+    }
+    let toml = toml::to_string_pretty(config).unwrap();
+    fs::write(config_path, toml).unwrap();
 }
+
+//pub fn generate_token() -> String {
+//    // TODO: Сделать авторизацию пользователя
+//    if config.token.is_empty() || !auth::validate_token(&config.token).await {
+//        config.token = auth::get_access_token().await?;
+//    }
+//}
 
 

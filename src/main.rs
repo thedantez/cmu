@@ -4,14 +4,15 @@ mod config;
 mod navigation;
 mod client;
 mod test_client;
+mod auth;
 
 use std::io;
 use crossterm::event::{self, Event};
 use vk_api::VkClient;
 use ratatui::Terminal;
-use config::{Config, load_config};
+use config::{Config, load_config, save_config};
 use client::{Client};
-use test_client::TestClient;
+//use test_client::TestClient;
 use ui::Command;
 
 const MIN_SIZE: (u16, u16) = (80, 23);
@@ -19,8 +20,22 @@ const MIN_SIZE: (u16, u16) = (80, 23);
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let conf: Config = load_config();
-    let client = Box::new(TestClient::new(conf.token.to_string()));
+    let mut conf: Config = load_config(); // load conf
+    let valid_token = match &conf.token {
+        Some(token) => {
+            auth::validate_token(token).await
+        }
+        None => false,
+    };
+    if !valid_token {
+        println!("need auth");
+        let token = auth::get_access_token().await.expect("auth failed");
+        conf.token = Some(token);
+        save_config(&conf);
+    }
+    //let client = Box::new(TestClient::new(conf.token.to_string()));
+    let token = conf.token.clone().unwrap();
+    let client = Box::new(VkClient::new(token));
     let dialogs = client.get_dialogs().await
         .expect("Error loading dialogs: ");
 

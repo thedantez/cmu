@@ -11,7 +11,7 @@ pub struct VkClient {
 }
 
 impl VkClient {
-    fn new(token: String) -> Self {
+    pub fn new(token: String) -> Self {
         VkClient {
             token,
             client: reqwest::Client::new(),
@@ -94,8 +94,8 @@ impl Client for VkClient {
         Ok(messages)
     }
 
-    async fn auth(&self) {
-        // TODO: Создать аутентификацию для вк
-        println!("Auth is not implemented!")
-    }
+    //async fn auth(&self) {
+    //    // TODO: Создать аутентификацию для вк
+    //    println!("Auth is not implemented!")
+    //}
 }
