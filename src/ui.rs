@@ -7,8 +7,17 @@ use ratatui::{
     text::{Line, Span, Text},
     layout::{Layout, Constraint, Direction, Alignment}
 };
-use crate::config::{Config, load_config};
-use crate::vk_api::{Dialog, Message, VkClient};
+use crate::config::{Config};
+use crate::navigation::{Mode, typing};
+use crate::client::{Dialog, Message, Client};
+
+
+// Used to prevent double mutable borrowing of self
+#[derive(Debug)]
+pub enum Command {
+    LoadMessages(i64),
+    SendMessage(i64, String), // peer_id, text
+}
 
 #[derive(Clone)]
 pub enum Screen {
@@ -26,29 +35,18 @@ pub enum Screen {
     },
 }
 
-#[derive(Debug)]
-pub enum Command {
-    LoadMessages(i64),
-    SendMessage(i64, String), // peer_id, text
-}
-
-#[derive(Clone, Copy, PartialEq)]
-pub enum Mode {
-    Normal,
-    Insert,
-}
-
 pub struct App {
     pub screen: Screen,
     pub dialogs: Vec<Dialog>,
     pub min_size: (u16, u16),
-    pub client: VkClient, pub running: bool,
+    pub client: Box<dyn Client>, 
+    pub running: bool,
     pub mode: Mode,
     pub config: Config
 }
 
 impl App {
-    pub fn new(client: VkClient, dialogs: Vec<Dialog>, min_size: (u16, u16)) -> Self {
+    pub fn new(client: Box<dyn Client>, dialogs: Vec<Dialog>, min_size: (u16, u16), conf: Config) -> Self {
         let mut list_state = ListState::default();
         if !dialogs.is_empty() {
             list_state.select(Some(0));
@@ -60,7 +58,7 @@ impl App {
             client,
             running: true,
             mode: Mode::Normal,
-            config: load_config(),
+            config: conf,
         }
     }
 
@@ -72,8 +70,12 @@ impl App {
         }
     }
 
-    pub async fn send_message(&mut self, peer_id: i64, text: &str) -> Result<(), Box<dyn std::error::Error>> {
-        self.client.send_message(peer_id, text).await
+    pub async fn send_message(&mut self, peer_id: i64, text: &str) {
+        if let Err(e) = self.client.send_message(peer_id, &text).await {
+            eprintln!("Error sending a message: {}", e);
+        } else {
+            self.load_messages(peer_id).await;
+        }
     }
 
     fn update_input_scroll(input: &str, cursor_char_idx: usize, visible_lines: usize, input_scroll: &mut usize) {
@@ -232,8 +234,7 @@ impl App {
                     .borders(Borders::ALL)
                     .title("  input  ");
 
-                let lines: Vec<&str> = input.split('\n').collect();
-                let mut remaining_chars = *cursor_char_idx;
+                let lines: Vec<&str> = input.split('\n').collect(); let mut remaining_chars = *cursor_char_idx;
                 let mut cursor_line_idx = 0;
                 let mut cursor_byte_in_line = 0;
                 for (i, line) in lines.iter().enumerate() {
@@ -293,7 +294,7 @@ impl App {
 
     // Process key input
     pub fn handle_input(&mut self, key_code: KeyCode) -> Option<Command> {
-        // Global bindings
+        // Global key bindings
         if self.config.keys.quit == key_code {
             self.running = false;
             return None;
@@ -315,20 +316,20 @@ impl App {
             }
         }
 
-        // Bindings for specific types of screens
-        match &mut self.screen.clone() {
+        // Key bindings for specific types of screens
+        match &mut self.screen {
             Screen::ChatList { list_state } => {
                 let dialogs = &self.dialogs;
-                if self.config.keys.move_up_list == key_code {
+                if self.config.keys.move_down_list == key_code {
                     let i = match list_state.selected() {
-                        Some(i) => {
-                            if i >= dialogs.len() - 1 { 0 } else { i + 1 }
+                        Some(j) => {
+                            if j >= dialogs.len() - 1 { 0 } else { j + 1 }
                         }
                         None => 0,
                     };
                     list_state.select(Some(i));
                 }
-                if self.config.keys.move_down_list == key_code {
+                if self.config.keys.move_up_list == key_code {
                     let i = match list_state.selected() {
                         Some(i) => {
                             if i == 0 { dialogs.len() - 1 } else { i - 1 }
@@ -353,18 +354,12 @@ impl App {
                         }
                     }
                 }
-
                 None
             }
 
             Screen::ChatView { peer_id, messages, input, scroll, selected, cursor_char_idx, input_scroll } => {
                 match self.mode {
                     Mode::Normal => {
-                        if self.config.keys.view_chat_list == key_code {
-                            self.screen = Screen::ChatList {
-                                list_state: ListState::default(),
-                            };
-                        }
                         if self.config.keys.move_down_list == key_code {
                             if *selected + 1 < messages.len() {
                                 *selected += 1;
@@ -382,52 +377,19 @@ impl App {
                             input.clear();
                             return Some(Command::SendMessage(*peer_id, text));
                         }
+
+                        // Смена экрана должна быть в конце, чтобы освободить self.screen до
+                        // присвоения
+                        if self.config.keys.view_chat_list == key_code {
+                            self.screen = Screen::ChatList {
+                                list_state: ListState::default(),
+                            };
+                        }
                         None
                     }
+
                     Mode::Insert => {
-                        match key_code {
-                            KeyCode::Backspace => {
-                                if *cursor_char_idx > 0 {
-                                    let byte_pos = input.char_indices()
-                                        .take(*cursor_char_idx)
-                                        .last()
-                                        .map(|(i, _)| i)
-                                        .unwrap();
-                                    input.remove(byte_pos);
-                                    *cursor_char_idx -= 1;
-                                }
-                            }
-                            KeyCode::Delete => {
-                                if *cursor_char_idx < input.chars().count() {
-                                    let byte_pos = input.char_indices()
-                                        .nth(*cursor_char_idx)
-                                        .map(|(i, _)| i)
-                                        .unwrap_or(input.len());
-                                    input.remove(byte_pos);
-                                }
-                            }
-                            KeyCode::End => { *cursor_char_idx = input.chars().count(); }
-                            KeyCode::Home => { *cursor_char_idx = 0; }
-                            KeyCode::Enter => {
-                                input.insert(*cursor_char_idx, '\n');
-                                *cursor_char_idx += 1;
-                            }
-                            KeyCode::Left => {
-                                if *cursor_char_idx > 0 { *cursor_char_idx -= 1; }
-                            }
-                            KeyCode::Right => {
-                                if *cursor_char_idx < input.chars().count() { *cursor_char_idx += 1; }
-                            }
-                            KeyCode::Char(c) => {
-                                let byte_pos = input.char_indices()
-                                    .nth(*cursor_char_idx)
-                                    .map(|(i, _)| i)
-                                    .unwrap_or(input.len());
-                                input.insert(byte_pos, c);
-                                *cursor_char_idx += 1;
-                            }
-                            _ => {}
-                        };
+                        typing(input, cursor_char_idx, key_code);
                         Self::update_input_scroll(input, *cursor_char_idx, 1, input_scroll);
                         None
                     }
