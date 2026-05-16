@@ -1,0 +1,45 @@
+name: release build
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: cmu
+            asset_name: cmu-linux
+
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: cmu
+            asset_name: cmu-macos
+
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: cmu.exe
+            asset_name: cmu-windows.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: build
+        run: cargo build --release
+
+      - name: upload release asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ github.event.release.upload_url }}
+          asset_path: ./target/release/${{ matrix.artifact_name }}
+          asset_name: ${{ matrix.asset_name }}
+          asset_content_type: application/octet-stream
