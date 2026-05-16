@@ -51,7 +51,7 @@ cargo build --release
 # dependses & requirements
 
   + Rust & Cargo (install from [rustup](https://rustup.rs/))
-  + token from VK (now by yourself, in features would OAuth)
+  + token from VK (by semi-handle OAuth)
 
 [![Rust](https://img.shields.io/badge/rust-stable-orange)](https://www.rust-lang.org)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
