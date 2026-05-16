@@ -1,12 +1,14 @@
 ```text
-___      ___ ____  ___      _______   ____ ____  _____ ________     ________ ____ ____ ____
-\  \    /  / |  | /  /      |  @@  \  |  | |  | /  __/ |_    _|     |_    _| |  | |  | |  |
- \  \  /  /  |  |/  /  ---- |   @  /  |  | |  | \__  \   |  |  ----   |  |   |  | |  | |  |
-  \  \/  /   |  |\  \  ---- |  |\  \  |  \_/  |  _/  /   |  |  ----   |  |   |  \_/  | |  |
-   \____/    |__| \__\      |__| \__\ |____/|_| /___/    |__|         |__|   |____/|_| |__|
+   _________    ____                 ___     ___
+  /         \  /    \___________    /   \   /   \
+ /     _____/  |                \   |   |   |   |
+/    /         |    /\     /\    |  |   |   |   |
+\    \_____    |   |  |   |  |   |  |   \___/   |
+ \          \  |   |  |   |  |   |  |           |
+  \_________/  \___/  \___/  \___/  \_______/\__/
 ```
 
-<p style="text-align: right">console messenger for VK w/ vim-like controlling</p>
+<p style="text-align: right">central messagins unit</p>
 
 [![Github release (latest by date)](https://img.shields.io/github/v/release/thedantez/vk-rust-tui)](https://github.com/thedantez/vk-rust-tui/releases)
 
@@ -16,6 +18,11 @@ ___      ___ ____  ___      _______   ____ ____  _____ ________     ________ ___
   + splitting screen into 2 parts (chats, messages from chat)
   + moving the cursor through messages
   + sending & getting messages by VK's API
+
+# available messengers:
+
+  + vk (available)
+  + telegram (coming soon)
 
 # vim keybindings:
 
@@ -44,7 +51,7 @@ cargo build --release
 # dependses & requirements
 
   + Rust & Cargo (install from [rustup](https://rustup.rs/))
-  + token from VK (now by yourself, in features would OAuth)
+  + token from VK (by semi-handle OAuth)
 
 [![Rust](https://img.shields.io/badge/rust-stable-orange)](https://www.rust-lang.org)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
