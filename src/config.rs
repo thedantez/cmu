@@ -95,17 +95,11 @@ pub fn load_config() -> Config {
     let config_path = get_config_path();
         if config_path.exists() {
         let content = fs::read_to_string(&config_path)
-            .expect("error w/ loading config.toml");
+            .expect("Error w/ loading config.toml");
         config = toml::from_str(&content).unwrap_or_else(|_| Config::default());
     } else {
         config = Config::default();
     }
-
-    // Token validation
-    //if "".to_string() == config.token {
-    //    config.token = generate_token();
-    //}
-    // TODO: Сделать валидацию для непустого токена через авторизатор
     config
 }
 
@@ -117,12 +111,4 @@ pub fn save_config(config: &Config) {
     let toml = toml::to_string_pretty(config).unwrap();
     fs::write(config_path, toml).unwrap();
 }
-
-//pub fn generate_token() -> String {
-//    // TODO: Сделать авторизацию пользователя
-//    if config.token.is_empty() || !auth::validate_token(&config.token).await {
-//        config.token = auth::get_access_token().await?;
-//    }
-//}
-
 
