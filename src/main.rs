@@ -21,6 +21,8 @@ const MIN_SIZE: (u16, u16) = (80, 23);
 #[tokio::main]
 async fn main() -> io::Result<()> {
     let mut conf: Config = load_config(); // load conf
+    
+    // Initializing a client
     let valid_token = match &conf.token {
         Some(token) => {
             auth::validate_token(token).await
@@ -28,8 +30,8 @@ async fn main() -> io::Result<()> {
         None => false,
     };
     if !valid_token {
-        println!("need auth");
-        let token = auth::get_access_token().await.expect("auth failed");
+        println!("Needs authorization");
+        let token = auth::get_access_token().await.expect("Error: Authorization failed!");
         conf.token = Some(token);
         save_config(&conf);
     }

@@ -10,7 +10,7 @@ pub async fn get_access_token() -> Result<String, Box<dyn std::error::Error + Se
                     response_type=token&\
                     v=5.199";
 
-    println!("opening browser for auth");
+    println!("Opening browser for authorization...");
 
     std::thread::spawn(move || {
         let _ = open::that(auth_url);
@@ -24,7 +24,7 @@ pub async fn get_access_token() -> Result<String, Box<dyn std::error::Error + Se
     let input = input.trim();
 
     if input.is_empty() {
-        return Err("error: value \"input\" is empty".into());
+        return Err("Error: value \"input\" is empty".into());
     }
 
     let target_str = if input.contains('#') {
@@ -42,7 +42,7 @@ pub async fn get_access_token() -> Result<String, Box<dyn std::error::Error + Se
         .map(|(_, v)| v.to_string())
         .ok_or("token not found in that url")?;
 
-    println!("token successful received");
+    println!("Token successfully received");
     Ok(token)
 }
 

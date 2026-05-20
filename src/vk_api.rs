@@ -58,7 +58,7 @@ impl Client for VkClient {
                     .and_then(|v| v.as_str())
                     .unwrap_or("w/out title")
             } else {
-                "Default chat"
+                "Direct chat"
             };
             let dialog = Dialog {
                 peer_id,
