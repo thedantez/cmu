@@ -69,10 +69,7 @@ async fn main() -> io::Result<()> {
     let tx_tick = tx.clone();
     thread::spawn(move || {
         loop {
-            // code w/ reqwests to vk api (long poll)
-            // for example: tx_vk.send(AppEvent::NewMessage(vk_msg)).unwrap();
-
-            thread::sleep(std::time::Duration::from_secs(3));
+            thread::sleep(std::time::Duration::from_secs(1));
             tx_tick.send(AppEvent::Tick).unwrap();
         }
     });
