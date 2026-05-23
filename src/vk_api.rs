@@ -93,9 +93,4 @@ impl Client for VkClient {
         messages.reverse();
         Ok(messages)
     }
-
-    //async fn auth(&self) {
-    //    // TODO: Создать аутентификацию для вк
-    //    println!("Auth is not implemented!")
-    //}
 }
