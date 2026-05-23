@@ -88,7 +88,7 @@ impl Client for VkClient {
 
     async fn get_messages(&self, peer_id: i64, count: u32) -> Result<Vec<Message>, Box<dyn std::error::Error + Send + Sync>> {
         let url = format!(
-            "https://api.vk.com/method/messages.getHistory?access_token={}&v=5.199&peer_id={}&count={}",
+            "https://api.vk.com/method/messages.getHistory?access_token={}&v=5.199&peer_id={}&count={}&extended=1",
             self.token,
             peer_id,
             count,
@@ -99,7 +99,7 @@ impl Client for VkClient {
             .ok_or("not found response.items")?;
 
         let empty_ar = Vec::new();
-        let profiles = resp["response"]["profilies"].as_array().unwrap_or(&empty_ar);
+        let profiles = resp["response"]["profiles"].as_array().unwrap_or(&empty_ar);
         let groups = resp["response"]["groups"].as_array().unwrap_or(&empty_ar);
 
         let mut messages = Vec::new();
