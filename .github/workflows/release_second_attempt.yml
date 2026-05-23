@@ -1,0 +1,54 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            binary: cmu
+            asset: cmu-linux
+
+          - os: macos-latest
+            binary: cmu
+            asset: cmu-macos
+
+          - os: windows-latest
+            binary: cmu.exe
+            asset: cmu-windows.exe
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build
+        run: cargo build --release
+
+      - name: Rename binary
+        shell: bash
+        run: |
+          mkdir dist
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp target/release/${{ matrix.binary }} dist/${{ matrix.asset }}
+          else
+            cp target/release/${{ matrix.binary }} dist/${{ matrix.asset }}
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
