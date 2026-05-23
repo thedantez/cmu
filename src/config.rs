@@ -85,7 +85,7 @@ impl Default for KeyBindings {
 fn get_config_path() -> PathBuf {
     dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
-        .join("vk-rust-tui")
+        .join("cmu")
         .join("config.toml")
 }
 
