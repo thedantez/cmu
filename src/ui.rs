@@ -39,7 +39,7 @@ pub struct App {
     pub screen: Screen,
     pub dialogs: Vec<Dialog>,
     pub min_size: (u16, u16),
-    pub client: Box<dyn Client>, 
+    pub client: Box<dyn Client>,
     pub running: bool,
     pub mode: Mode,
     pub config: Config
@@ -374,8 +374,11 @@ impl App {
                         }
                         if let KeyCode::Enter = key_code {
                             let text = input.clone();
-                            input.clear();
-                            return Some(Command::SendMessage(*peer_id, text));
+                            if !text.is_empty() {
+                                input.clear();
+                                return Some(Command::SendMessage(*peer_id, text));
+                            }
+                            return None
                         }
 
                         // Смена экрана должна быть в конце, чтобы освободить self.screen до
