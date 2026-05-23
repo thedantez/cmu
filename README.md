@@ -10,7 +10,7 @@
 
 <p style="text-align: right">central messagins unit</p>
 
-[![Github release (latest by date)](https://img.shields.io/github/v/release/thedantez/vk-rust-tui)](https://github.com/thedantez/vk-rust-tui/releases)
+[![Github release (latest by date)](https://img.shields.io/github/v/release/thedantez/cmu)](https://github.com/thedantez/cmu/releases)
 
 # app features:
 
@@ -21,31 +21,12 @@
 
 # available messengers:
 
-  + vk (available)
-  + telegram (coming soon)
-
-# vim keybindings:
-
-  + moving cursor (j/k)
-  + opening chat (l/enter)
-  + close chat (h)
-  + sending message (enter w/ normal mode & opened chat)
-  + change mode to insert (i)
-  + change mode to normal (esc)
-  + quit (q)
-
-# installation:
-
-  + AUR (comming soon)
-  + from code
-
-```bash
-git clone https://github.com/thedantez/vk-rust-tui.git
-cd vk-rust-tui/
-cargo build --release
+  + cmu.git
+cd cmu/
+cargo install --path .
 
 # start
-./target/release/vk-rust-tui
+cmu
 ```
 
 # dependses & requirements
