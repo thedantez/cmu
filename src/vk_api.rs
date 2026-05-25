@@ -1,5 +1,6 @@
 //  api calls to api.vk.com
-use reqwest; use serde_json::Value;
+use reqwest;
+use serde_json::Value;
 use urlencoding;
 use crate::client::{Client, Message, Dialog};
 use async_trait::async_trait;
@@ -7,22 +8,35 @@ use async_trait::async_trait;
 
 pub struct VkClient {
     token: String,
+    user: Value,
     client: reqwest::Client,
 }
 
 impl VkClient {
-    pub fn new(token: String) -> Self {
-        VkClient {
+    pub async fn new(token: String) -> Result<Self, Box<dyn std::error::Error>> {
+        let client = reqwest::Client::new();
+        let url = format!(
+            "https://api.vk.com/method/users.get?access_token={}&v=5.199",
             token,
-            client: reqwest::Client::new(),
+        );
+        let resp = client.get(&url).send().await?.json::<Value>().await?;
+        if resp["error"].is_object() {
+            Err("VK: cannot get user's data".into())
+        } else {
+            Ok(VkClient {
+                token,
+                user: resp["response"][0].clone(),
+                client,
+            })
         }
     }
-
 }
 
 
 #[async_trait]
 impl Client for VkClient {
+    fn get_user(&self) -> &Value {&self.user}
+
     async fn send_message(&self, peer_id: i64, text: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let encoded_text = urlencoding::encode(&text);
         let url = format!(
@@ -103,29 +117,36 @@ impl Client for VkClient {
         let groups = resp["response"]["groups"].as_array().unwrap_or(&empty_ar);
 
         let mut messages = Vec::new();
-        // parsing
         for item in items {
             //let from_id = item["from_id"].ok_or("not found message")?;
             let from_id = item["from_id"].as_i64().unwrap_or(0);
-            let text = item["text"].as_str().unwrap_or("").to_string();
 
+            // default message fields
+            let text = item["text"].as_str().unwrap_or("").to_string();
             let mut sender_name = format!("id{}", from_id);
+            let mut is_me: bool = false;
+            let mut owner: Value = serde_json::from_str("{}").unwrap();
 
             if from_id > 0 {
                 if let Some(profile) = profiles.iter().find(|p| p["id"].as_i64() == Some(from_id)) {
+                    if from_id == self.user["id"].as_i64().unwrap_or(0) { is_me = true; } 
                     let f_name = profile["first_name"].as_str().unwrap_or("");
                     let l_name = profile["last_name"].as_str().unwrap_or("");
                     sender_name = format!("{} {}", f_name, l_name);
+                    owner = profile.clone();
                 }
             } else if from_id < 0 {
                 let abs_id = -from_id;
                 if let Some(group) = groups.iter().find(|g| g["id"].as_i64() == Some(abs_id)) {
                     sender_name = group["name"].as_str().unwrap_or("Group").to_string();
+                    owner = group.clone();
                 }
             }
 
             messages.push(Message {
-                sender_name: sender_name,
+                is_me,
+                owner,
+                sender_name,
                 text
             });
         }

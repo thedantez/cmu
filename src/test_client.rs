@@ -8,6 +8,7 @@ const PLACEHOLDERS: [&str; 10] = ["Привет", "Пока", "Как дела",
 
 pub struct TestClient {
     dialog_count: u16,
+    user: serde_json::Value,
     messages: Vec<Message>,
 }
 
@@ -15,6 +16,7 @@ impl TestClient {
     pub fn new(_: String) -> Self {
         TestClient {
             dialog_count: 40,
+            user: serde_json::from_str("{}").unwrap(),
             messages: Self::generate_messages(400),
         }
     }
@@ -26,6 +28,8 @@ impl TestClient {
         for _ in 1..count {
             let text = &placeholders[rng.gen_range(0..placeholders.len())];
             messages.push(Message {
+                is_me: false,
+                owner: serde_json::from_str("{}").unwrap(),
                 sender_name: "Kolyan".to_string(),
                 text: text.to_string(),
             });
@@ -37,6 +41,8 @@ impl TestClient {
 
 #[async_trait]
 impl Client for TestClient {
+    fn get_user(&self) -> &serde_json::Value {&self.user}
+
     async fn get_dialogs(&self) -> Result<Vec<Dialog>, Box<dyn std::error::Error + Send + Sync>> {
         let mut dialogs = Vec::new();
         for i in 1..self.dialog_count {
