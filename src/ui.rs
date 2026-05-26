@@ -216,9 +216,18 @@ impl App {
                 let msg_area = vertical_split[0];
                 let input_area = vertical_split[1];
 
-                // list messages
+                // Render list of loaded messages 
                 let items: Vec<ListItem> = messages.iter()
-                    .map(|m| ListItem::new(format!("{} : {}", m.sender_name, m.text)))
+                    .map(|m| ListItem::new(
+                        Line::from(vec![
+                            if m.is_me {
+                                Span::styled("You: ", Style::default().fg(Color::Blue))
+                            } else {
+                                Span::raw(format!("{}: ", &m.sender_name))
+                            },
+                            Span::raw(&m.text)
+                        ]))
+                    )
                     .collect();
                 let mut list_state = ListState::default()
                     .with_selected(Some(*selected))
