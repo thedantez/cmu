@@ -37,17 +37,40 @@ async fn main() -> io::Result<()> {
         }
         None => false,
     };
+    
     if !valid_token {
-        println!("Needs authorization");
-        let token = auth::get_access_token().await.expect("Error: Authorization failed!");
-        conf.token = Some(token);
-        save_config(&conf);
+        println!("Authorization required");
+        match auth::get_access_token().await {
+            Ok(token) => {
+                conf.token = Some(token);
+                save_config(&conf);
+            }
+            Err(e) => {
+                eprintln!("Authorization failed: {}", e);
+                return Err(io::Error::new(io::ErrorKind::Other, "Authorization failed"));
+            }
+        }
     }
-    //let client = Box::new(TestClient::new(conf.token.to_string()));
-    let token = conf.token.clone().unwrap();
-    let client = Box::new(VkClient::new(token).await.expect("Error initializing the client: "));
-    let dialogs = client.get_dialogs().await
-        .expect("Error loading dialogs: ");
+
+    let token = conf.token.clone().ok_or_else(|| {
+        io::Error::new(io::ErrorKind::NotFound, "Token not found after authorization")
+    })?;
+
+    let client = match VkClient::new(token).await {
+        Ok(c) => Box::new(c) as Box<dyn Client>,
+        Err(e) => {
+            eprintln!("Failed to initialize VK client: {}", e);
+            return Err(io::Error::new(io::ErrorKind::Other, "Client initialization failed"));
+        }
+    };
+
+    let dialogs = match client.get_dialogs().await {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("Failed to load dialogs: {}", e);
+            return Err(io::Error::new(io::ErrorKind::Other, "Failed to load dialogs"));
+        }
+    };
 
     // Loading the app
     let mut stdout = io::stdout();
@@ -62,15 +85,16 @@ async fn main() -> io::Result<()> {
     thread::spawn(move || {
         loop {
             if let Ok(crossterm::event::Event::Key(key)) = crossterm::event::read() {
-                tx_keys.send(AppEvent::Input(key)).unwrap();
+                let _ = tx_keys.send(AppEvent::Input(key));
             }
         }
     });
+
     let tx_tick = tx.clone();
     thread::spawn(move || {
         loop {
             thread::sleep(std::time::Duration::from_secs(1));
-            tx_tick.send(AppEvent::Tick).unwrap();
+            let _ = tx_tick.send(AppEvent::Tick);
         }
     });
 
