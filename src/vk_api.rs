@@ -101,11 +101,12 @@ impl Client for VkClient {
         text: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         let encoded_text = urlencoding::encode(text);
+        let random_id: i32 = rand::thread_rng().gen();
         let params = vec![
             ("access_token", self.token.clone()),
             ("peer_id", peer_id.to_string()),
             ("message", encoded_text.to_string()),
-            ("random_id", rand::thread_rng().gen().to_string()),
+            ("random_id", random_id.to_string()),
         ];
 
         let url = format!(
