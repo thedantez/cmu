@@ -4,6 +4,7 @@ use serde_json::Value;
 use urlencoding;
 use crate::client::{Client, Message, Dialog};
 use async_trait::async_trait;
+use rand::Rng;
 
 const VK_API_VERSION: &str = "5.199";
 const VK_API_BASE: &str = "https://api.vk.com/method";
@@ -23,7 +24,7 @@ impl VkClient {
             VK_API_BASE, token, VK_API_VERSION
         );
         let resp = client.get(&url).send().await?.json::<Value>().await?;
-        
+
         if resp["error"].is_object() {
             return Err("VK API: unable to retrieve user data".into());
         }
@@ -41,7 +42,7 @@ impl VkClient {
             .map(|(k, v)| format!("{}={}", k, v))
             .collect::<Vec<_>>()
             .join("&");
-        
+
         format!(
             "{}/{}?{}&v={}",
             VK_API_BASE, method, params_str, VK_API_VERSION
@@ -104,7 +105,7 @@ impl Client for VkClient {
             ("access_token", self.token.clone()),
             ("peer_id", peer_id.to_string()),
             ("message", encoded_text.to_string()),
-            ("random_id", "0".to_string()),
+            ("random_id", rand::thread_rng().gen().to_string()),
         ];
 
         let url = format!(
@@ -118,7 +119,7 @@ impl Client for VkClient {
         );
 
         let resp = self.client.get(&url).send().await?.json::<Value>().await?;
-        
+
         if resp["error"].is_object() {
             return Err("VK API: failed to send message".into());
         }
@@ -132,7 +133,7 @@ impl Client for VkClient {
             "{}/messages.getConversations?access_token={}&count={}&extended=1&v={}",
             VK_API_BASE, self.token, DEFAULT_DIALOGS_COUNT, VK_API_VERSION
         );
-        
+
         let resp = self.client.get(&url).send().await?.json::<Value>().await?;
         let items = resp["response"]["items"]
             .as_array()

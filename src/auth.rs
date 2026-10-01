@@ -57,15 +57,16 @@ pub async fn validate_token(token: &str) -> bool {
         "https://api.vk.com/method/users.get?access_token={}&v=5.199",
         token
     );
-    
+
     match reqwest::Client::new()
         .get(&url)
         .send()
-        .await
-        .and_then(|resp| resp.text())
-    {
-        Ok(text) => !text.contains("\"error\""),
-        Err(_) => false,
+        .await {
+            Ok(resp) => match resp.text().await {
+                Ok(text) => !text.contains("\"error\""),
+                Err(_) => false,
+            },
+            Err(_) => false,
     }
 }
 

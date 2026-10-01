@@ -6,6 +6,11 @@ pub enum Mode {
     Insert,
 }
 
+fn byte_idx(s: &str, char_idx: usize) -> usize {
+    s.char_indices().nth(char_idx).map(|(b, _)| b).unwrap_or(s.len())
+}
+
+fn char_len(s: &str) -> usize { s.chars().count() }
 
 pub fn typing(input: &mut String, cursor_char_idx: &mut usize, key_code: KeyCode) {
     match key_code {
@@ -32,7 +37,11 @@ pub fn typing(input: &mut String, cursor_char_idx: &mut usize, key_code: KeyCode
         KeyCode::End => { *cursor_char_idx = input.chars().count(); }
         KeyCode::Home => { *cursor_char_idx = 0; }
         KeyCode::Enter => {
-            input.insert(*cursor_char_idx, '\n');
+            let byte_pos = input.char_indices()
+                .nth(*cursor_char_idx)
+                .map(|(i, _)| i)
+                .unwrap_or(input.len());
+            input.insert(byte_pos, '\n');
             *cursor_char_idx += 1;
         }
         KeyCode::Left => {

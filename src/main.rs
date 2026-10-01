@@ -37,7 +37,7 @@ async fn main() -> io::Result<()> {
         }
         None => false,
     };
-    
+
     if !valid_token {
         println!("Authorization required");
         match auth::get_access_token().await {

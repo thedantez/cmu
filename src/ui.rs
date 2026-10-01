@@ -1,6 +1,7 @@
 use crossterm::event::KeyCode;
+use textwrap;
 use ratatui::{
-    widgets::{Block, Borders, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
     style::{Style, Stylize, Color},
     symbols,
     Frame,
@@ -12,7 +13,7 @@ use crate::navigation::{Mode, typing};
 use crate::client::{Dialog, Message, Client};
 
 const MESSAGES_PER_PAGE: u32 = 20;
-const INPUT_AREA_HEIGHT: u16 = 3;
+const INPUT_AREA_HEIGHT: u16 = 6;
 const LEFT_PANEL_WIDTH: u16 = 30;
 const MODE_BAR_HEIGHT: u16 = 1;
 
@@ -76,14 +77,17 @@ impl App {
     }
 
     pub async fn load_messages(&mut self, peer_id: i64) {
-        match self.client.get_messages(peer_id, MESSAGES_PER_PAGE).await {
-            Ok(messages) => {
-                if let Screen::ChatView { messages: msg_vec, .. } = &mut self.screen {
-                    *msg_vec = messages;
+        if let Ok(messages) = self.client.get_messages(peer_id, 20).await {
+            if let Screen::ChatView { messages: msg_vec, selected, scroll, .. } = &mut self.screen {
+                *msg_vec = messages;
+                let len = msg_vec.len();
+                if len == 0 {
+                    *selected = 0;
+                    *scroll = 0;
+                } else {
+                    if *selected >= len { *selected = len - 1; }
+                    if *scroll > *selected { *scroll = *selected; }
                 }
-            }
-            Err(e) => {
-                eprintln!("Failed to load messages: {}", e);
             }
         }
     }
@@ -284,26 +288,50 @@ impl App {
         area: ratatui::layout::Rect,
         messages: &[Message],
         selected: usize,
-        scroll: usize,
+        _scroll: usize,
         block: Block,
     ) {
+        let inner_width = (area.width as usize).saturating_sub(2).max(1);
+
         let items: Vec<ListItem> = messages
             .iter()
             .map(|m| {
-                ListItem::new(Line::from(vec![
-                    if m.is_me {
-                        Span::styled("You: ", Style::default().fg(Color::Blue))
+                let (prefix, prefix_style) = if m.is_me {
+                    ("You: ".to_string(), Style::default().fg(Color::Blue))
+                } else {
+                    (format!("{}: ", &m.sender_name), Style::default())
+                };
+                let prefix_len = prefix.chars().count();
+                let text_width = inner_width.saturating_sub(prefix_len).max(1);
+                let wrapped_body = textwrap::wrap(&m.text, text_width);
+
+                let mut lines: Vec<Line> = Vec::new();
+                for (i, chunk) in wrapped_body.into_iter().enumerate() {
+                    if i == 0 {
+                        lines.push(Line::from(vec![
+                                Span::styled(prefix.clone(), prefix_style),
+                                Span::raw(chunk.into_owned()),
+                        ]));
                     } else {
-                        Span::raw(format!("{}: ", &m.sender_name))
-                    },
-                    Span::raw(&m.text),
-                ]))
+                        lines.push(Line::from(Span::raw(chunk.into_owned())));
+                    }
+                }
+                if lines.is_empty() {
+                    lines.push(Line::from(Span::styled(prefix.clone(), prefix_style)));
+                }
+
+                ListItem::new(Text::from(lines))
             })
-            .collect();
+        .collect();
+
+        let selected_opt = if messages.is_empty() {
+            None
+        } else {
+            Some(selected.min(messages.len() - 1))
+        };
 
         let mut list_state = ListState::default()
-            .with_selected(Some(selected))
-            .with_offset(scroll);
+            .with_selected(selected_opt);
 
         let list = List::new(items)
             .block(block)
@@ -340,10 +368,15 @@ impl App {
                     Line::from(Span::raw(*line))
                 }
             })
-            .collect();
+        .collect();
 
         let text = Text::from(display_lines);
-        f.render_widget(Paragraph::new(text).block(input_block), area);
+        f.render_widget(
+            Paragraph::new(text)
+            .block(input_block)
+            .wrap(Wrap { trim: false }),
+            area,
+        );
     }
 
     fn render_cursor_line(line: &str, cursor_byte_in_line: usize) -> Line {
@@ -373,8 +406,8 @@ impl App {
             Span::styled(
                 cursor_char,
                 Style::default()
-                    .bg(Color::White)
-                    .fg(Color::Black),
+                .bg(Color::White)
+                .fg(Color::Black),
             ),
             Span::raw(after),
         ])
@@ -417,111 +450,138 @@ impl App {
             }
         }
 
-        // Screen-specific key bindings
-        match &mut self.screen {
-            Screen::ChatList { list_state } => {
-                self.handle_chat_list_input(key_code, list_state)
-            }
-            Screen::ChatView {
-                peer_id,
-                messages,
-                input,
-                scroll,
-                selected,
-                cursor_char_idx,
-                input_scroll,
-            } => self.handle_chat_view_input(
-                key_code,
-                *peer_id,
-                messages,
-                input,
-                scroll,
-                selected,
-                cursor_char_idx,
-                input_scroll,
-            ),
+        if matches!(self.screen, Screen::ChatList { .. }) {
+            self.handle_chat_list_input(key_code)
+        } else {
+            self.handle_chat_view_input(key_code)
         }
     }
 
-    fn handle_chat_list_input(&mut self, key_code: KeyCode, list_state: &mut ListState) -> Option<Command> {
-        let dialogs = &self.dialogs;
+    fn handle_chat_list_input(&mut self, key_code: KeyCode) -> Option<Command> {
+        let move_down = self.config.keys.move_down_list == key_code;
+        let move_up = self.config.keys.move_up_list == key_code;
+        let enter = [self.config.keys.enter_chat, self.config.keys.enter_chat_secondary]
+            .contains(&key_code);
 
-        if self.config.keys.move_down_list == key_code {
-            let next_idx = match list_state.selected() {
-                Some(i) if i >= dialogs.len().saturating_sub(1) => 0,
-                Some(i) => i + 1,
-                None => 0,
-            };
-            list_state.select(Some(next_idx));
-        } else if self.config.keys.move_up_list == key_code {
-            let prev_idx = match list_state.selected() {
-                Some(0) => dialogs.len().saturating_sub(1),
-                Some(i) => i - 1,
-                None => 0,
-            };
-            list_state.select(Some(prev_idx));
-        } else if [self.config.keys.enter_chat, self.config.keys.enter_chat_secondary]
-            .contains(&key_code)
-        {
-            if let Some(selected) = list_state.selected() {
-                if let Some(dialog) = dialogs.get(selected) {
-                    self.screen = Screen::ChatView {
-                        peer_id: dialog.peer_id,
-                        messages: Vec::new(),
-                        input: String::new(),
-                        scroll: 0,
-                        selected: 0,
-                        cursor_char_idx: 0,
-                        input_scroll: 0,
+        if move_down || move_up {
+            let dialogs_len = self.dialogs.len();
+            if dialogs_len == 0 {
+                return None;
+            }
+            if let Screen::ChatList { list_state } = &mut self.screen {
+                if move_down {
+                    let next_idx = match list_state.selected() {
+                        Some(i) if i >= dialogs_len - 1 => 0,
+                        Some(i) => i + 1,
+                        None => 0,
                     };
-                    return Some(Command::LoadMessages(dialog.peer_id));
+                    list_state.select(Some(next_idx));
+                } else {
+                    let prev_idx = match list_state.selected() {
+                        Some(0) => dialogs_len - 1,
+                        Some(i) => i - 1,
+                        None => 0,
+                    };
+                    list_state.select(Some(prev_idx));
                 }
             }
+            return None
         }
 
+        if enter {
+            let peer_id = match &self.screen {
+                Screen::ChatList { list_state } => list_state
+                    .selected()
+                    .and_then(|i| self.dialogs.get(i))
+                    .map(|d| d.peer_id),
+                _ => None,
+            };
+
+            if let Some(peer_id) = peer_id {
+                self.screen = Screen::ChatView {
+                    peer_id,
+                    messages: Vec::new(),
+                    input: String::new(),
+                    scroll: 0,
+                    selected: 0,
+                    cursor_char_idx: 0,
+                    input_scroll: 0,
+                };
+                return Some(Command::LoadMessages(peer_id));
+            }
+        }
         None
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn handle_chat_view_input(
-        &mut self,
-        key_code: KeyCode,
-        peer_id: i64,
-        messages: &[Message],
-        input: &mut String,
-        scroll: &mut usize,
-        selected: &mut usize,
-        cursor_char_idx: &mut usize,
-        input_scroll: &mut usize,
-    ) -> Option<Command> {
+    fn handle_chat_view_input(&mut self, key_code: KeyCode) -> Option<Command> {
         match self.mode {
             Mode::Normal => {
-                if self.config.keys.move_down_list == key_code {
-                    if *selected + 1 < messages.len() {
-                        *selected += 1;
-                        *scroll = *selected;
+                let move_down = self.config.keys.move_down_list == key_code;
+                let move_up = self.config.keys.move_up_list == key_code;
+                let view_list = self.config.keys.view_chat_list == key_code;
+
+                if move_down || move_up {
+                    if let Screen::ChatView {
+                        messages,
+                        selected,
+                        scroll,
+                        ..
+                    } = &mut self.screen
+                    {
+                        if move_down {
+                            if *selected + 1 < messages.len() {
+                                *selected += 1;
+                                *scroll = *selected;
+                            }
+                        } else if *selected > 0 {
+                            *selected -= 1;
+                            *scroll = *selected;
+                        }
                     }
-                } else if self.config.keys.move_up_list == key_code {
-                    if *selected > 0 {
-                        *selected -= 1;
-                        *scroll = *selected;
-                    }
-                } else if key_code == KeyCode::Enter {
-                    if !input.is_empty() {
-                        let text = input.clone();
-                        input.clear();
+                    return None;
+                }
+
+                if key_code == KeyCode::Enter {
+                    let (peer_id, text) =
+                        if let Screen::ChatView { peer_id, input, .. } = &self.screen {
+                            (*peer_id, input.clone())
+                        } else {
+                            return None;
+                        };
+
+                    if !text.is_empty() {
+                        if let Screen::ChatView { input, .. } = &mut self.screen {
+                            input.clear();
+                        }
                         return Some(Command::SendMessage(peer_id, text));
                     }
-                } else if self.config.keys.view_chat_list == key_code {
+                    return None;
+                }
+
+                if view_list {
                     self.screen = Screen::ChatList {
                         list_state: ListState::default(),
                     };
                 }
                 None
             }
+
             Mode::Insert => {
-                typing(input, cursor_char_idx, key_code);
-                Self::update_input_scroll(input, *cursor_char_idx, 1, input_scroll);
+                if let Screen::ChatView {
+                    input,
+                    cursor_char_idx,
+                    input_scroll,
+                    ..
+                } = &mut self.screen
+                {
+                    typing(input, cursor_char_idx, key_code);
+                    Self::update_input_scroll(
+                        input,
+                        *cursor_char_idx,
+                        (INPUT_AREA_HEIGHT as usize).saturating_sub(2),
+                        input_scroll,
+                    );
+                }
                 None
             }
         }
