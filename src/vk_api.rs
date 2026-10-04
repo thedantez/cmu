@@ -18,7 +18,10 @@ pub struct VkClient {
 
 impl VkClient {
     pub async fn new(token: String) -> Result<Self, Box<dyn std::error::Error>> {
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .user_agent("KateMobileAndroid/56 lite-arm64-v8a (Android 14; SDK 34; arm64-v8a; Google Pixel; ru)")
+            .build()?;
+
         let url = format!(
             "{}/users.get?access_token={}&v={}",
             VK_API_BASE, token, VK_API_VERSION

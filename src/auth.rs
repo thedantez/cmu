@@ -1,7 +1,7 @@
 use std::io::{self, Write};
 use url::Url;
 
-const VK_AUTH_URL: &str = "https://oauth.vk.com/authorize?client_id=6287487&display=page&\
+const VK_AUTH_URL: &str = "https://oauth.vk.com/authorize?client_id=2685278&display=page&\
                            redirect_uri=https://oauth.vk.com/blank.html&scope=messages,offline&\
                            response_type=token&v=5.199";
 
@@ -57,8 +57,12 @@ pub async fn validate_token(token: &str) -> bool {
         "https://api.vk.com/method/users.get?access_token={}&v=5.199",
         token
     );
+    let client = reqwest::Client::builder()
+        .user_agent("KateMobileAndroid/56 lite-arm64-v8a (Android 14; SDK 34; arm64-v8a; Google Pixel; ru)")
+        .build()
+        .unwrap_or_default();
 
-    match reqwest::Client::new()
+    match client
         .get(&url)
         .send()
         .await {
