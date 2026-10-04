@@ -103,29 +103,29 @@ impl Client for VkClient {
         peer_id: i64,
         text: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let encoded_text = urlencoding::encode(text);
         let random_id: i32 = rand::thread_rng().gen();
-        let params = vec![
-            ("access_token", self.token.clone()),
-            ("peer_id", peer_id.to_string()),
-            ("message", encoded_text.to_string()),
-            ("random_id", random_id.to_string()),
+        let url = format!("{}/messages.send", VK_API_BASE);
+
+        let params = [
+            ("access_token", self.token.as_str()),
+            ("peer_id", &peer_id.to_string()),
+            ("message", text),
+            ("random_id", &random_id.to_string()),
+            ("v", VK_API_VERSION),
         ];
 
-        let url = format!(
-            "{}/messages.send?{}",
-            VK_API_BASE,
-            params
-                .iter()
-                .map(|(k, v)| format!("{}={}", k, v))
-                .collect::<Vec<_>>()
-                .join("&")
-        );
+        let resp = self.client
+            .post(&url)
+            .form(&params)
+            .send()
+            .await?
+            .json::<Value>()
+            .await?;
 
-        let resp = self.client.get(&url).send().await?.json::<Value>().await?;
-
-        if resp["error"].is_object() {
-            return Err("VK API: failed to send message".into());
+        if let Some(err) = resp.get("error") {
+            let error_msg = err["error_msg"].as_str().unwrap_or("unknown error");
+            let error_code = err["error_code"].as_i64().unwrap_or(0);
+            return Err(format!("VK API error {}: {}", error_code, error_msg).into());
         }
         Ok(())
     }
