@@ -93,7 +93,7 @@ async fn main() -> io::Result<()> {
     let tx_tick = tx.clone();
     thread::spawn(move || {
         loop {
-            thread::sleep(std::time::Duration::from_secs(1));
+            thread::sleep(std::time::Duration::from_secs(3));
             let _ = tx_tick.send(AppEvent::Tick);
         }
     });
@@ -120,12 +120,14 @@ async fn main() -> io::Result<()> {
                     }
                 }
                 AppEvent::Tick => {
-                    let active_peer_id = match &app.screen {
-                        ui::Screen::ChatView { peer_id, .. } => Some(*peer_id),
-                        _ => None,
-                    };
-                    if let Some(id) = active_peer_id {
-                        app.load_messages(id).await;
+                    if app.mode != navigation::Mode::Insert {
+                        let active_peer_id = match &app.screen {
+                            ui::Screen::ChatView { peer_id, .. } => Some(*peer_id),
+                            _ => None,
+                        };
+                        if let Some(id) = active_peer_id {
+                            app.load_messages(id).await;
+                        }
                     }
                 }
             }
