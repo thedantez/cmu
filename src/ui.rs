@@ -303,7 +303,9 @@ impl App {
                 };
                 let prefix_len = prefix.chars().count();
                 let text_width = inner_width.saturating_sub(prefix_len).max(1);
-                let wrapped_body = textwrap::wrap(&m.text, text_width);
+                let options = textwrap::Options::new(text_width)
+                    .break_words(true);
+                let wrapped_body = textwrap::wrap(&m.text, &options);
 
                 let mut lines: Vec<Line> = Vec::new();
                 for (i, chunk) in wrapped_body.into_iter().enumerate() {
